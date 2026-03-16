@@ -1,0 +1,11 @@
+.serena/
+node_modules/
+dist/
+*.tgz
+coverage/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.agents/
+.codex/
+.claude/
