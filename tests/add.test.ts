@@ -4,17 +4,24 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as prompts from '@clack/prompts';
+import * as listPrompt from '../src/list-prompt.js';
 import { parseAddOptions, runAdd } from '../src/add.js';
 
 vi.mock('@clack/prompts', () => ({
-  multiselect: vi.fn(),
   text: vi.fn(),
-  isCancel: vi.fn(() => false),
   cancel: vi.fn(),
   log: {
     error: vi.fn(),
+    message: vi.fn(),
     success: vi.fn(),
   },
+}));
+
+vi.mock('../src/list-prompt.js', () => ({
+  listPromptCancelSymbol: Symbol('list-prompt-cancel'),
+  isListPromptCancel: vi.fn((value) => typeof value === 'symbol'),
+  multiselectListPrompt: vi.fn(),
+  selectListPrompt: vi.fn(),
 }));
 
 describe('add command helpers', () => {
@@ -46,8 +53,8 @@ describe('add command', () => {
     originalHome = process.env.USERPROFILE;
     process.env.USERPROFILE = homeDir;
     process.env.HOME = homeDir;
-    vi.mocked(prompts.multiselect).mockReset();
-    vi.mocked(prompts.multiselect).mockResolvedValue(['agent-browser']);
+    vi.mocked(listPrompt.multiselectListPrompt).mockReset();
+    vi.mocked(listPrompt.multiselectListPrompt).mockResolvedValue(['agent-browser']);
   });
 
   afterEach(() => {
@@ -77,8 +84,9 @@ describe('add command', () => {
 
     await runAdd(sourceRepo);
 
-    expect(prompts.multiselect).toHaveBeenCalledTimes(1);
-    const [call] = vi.mocked(prompts.multiselect).mock.calls;
+    expect(prompts.log.message).toHaveBeenCalled();
+    expect(listPrompt.multiselectListPrompt).toHaveBeenCalledTimes(1);
+    const [call] = vi.mocked(listPrompt.multiselectListPrompt).mock.calls;
     const option = call?.[0].options[0];
     expect(option?.value).toBe('agent-browser');
     expect(option?.label).toBe('agent-browser');

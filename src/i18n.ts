@@ -42,8 +42,14 @@ General:
   noMatchingSkillsFound: withParams(({ names }) => `No matching skills found for: ${names}`),
   selectSkillsToInstall: 'Select skills to install',
   multiselectPromptHelp:
-    '(Use arrow keys to navigate, Space to select or deselect, A to select or deselect all, Enter to confirm)',
-  selectPromptHelp: '(Use arrow keys to navigate, Enter to confirm)',
+    'Use arrow keys to navigate · Space to select · A to select all · Enter to confirm · ESC to cancel',
+  selectPromptHelp: 'Use arrow keys to navigate · Enter to confirm · ESC to cancel',
+  promptNoOptions: '(no options)',
+  promptCancelled: 'Cancelled',
+  promptSelectedCount: withParams(({ count }) => `Selected: ${count}`),
+  promptMoreAbove: withParams(({ count }) => `↑ ${count} more above`),
+  promptMoreBelow: withParams(({ count }) => `↓ ${count} more below`),
+  promptSummaryMore: withParams(({ count }) => `+${count} more`),
   installedSkillsIntoBaseDir: withParams(({ count, baseDir }) => `Installed ${count} skill(s) into ${baseDir}`),
   unknownError: 'Unknown error',
   failedToClone: withParams(({ url, message }) => `Failed to clone ${url}: ${message}`),
@@ -127,8 +133,14 @@ const zhMessages: Record<TranslationKey, MessageValue> = {
   noSkillsFoundInSource: '来源中未找到任何技能。',
   noMatchingSkillsFound: withParams(({ names }) => `未找到匹配的技能：${names}`),
   selectSkillsToInstall: '选择要安装的技能',
-  multiselectPromptHelp: '（使用方向键切换，空格选择或取消选择，a 全选或取消全选，回车确认）',
-  selectPromptHelp: '（使用方向键切换，回车确认）',
+  multiselectPromptHelp: '↑↓ 切换 · Space 选择 · A 全选 · Enter 确认 · ESC 取消',
+  selectPromptHelp: '↑↓ 切换 · Enter 确认 · ESC 取消',
+  promptNoOptions: '（无可选项）',
+  promptCancelled: '已取消',
+  promptSelectedCount: withParams(({ count }) => `已选 ${count} 项`),
+  promptMoreAbove: withParams(({ count }) => `↑ 上方还有 ${count} 项`),
+  promptMoreBelow: withParams(({ count }) => `↓ 下方还有 ${count} 项`),
+  promptSummaryMore: withParams(({ count }) => `+${count} 项`),
   installedSkillsIntoBaseDir: withParams(({ count, baseDir }) => `已安装 ${count} 个技能到 ${baseDir}`),
   unknownError: '未知错误',
   failedToClone: withParams(({ url, message }) => `克隆 ${url} 失败：${message}`),
@@ -187,6 +199,3 @@ export function t(key: TranslationKey, params: MessageParams = {}, locale = reso
   const entry = messages[locale][key];
   return typeof entry === 'function' ? entry(params) : entry;
 }
-
-
-

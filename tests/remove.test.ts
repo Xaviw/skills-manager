@@ -3,20 +3,23 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import pc from 'picocolors';
 import * as baseDir from '../src/base-dir.js';
 import { t } from '../src/i18n.js';
+import * as listPrompt from '../src/list-prompt.js';
 import { runRemove } from '../src/remove.js';
 
-function withMultiselectHelp(message: string): string {
-  return `${message} ${pc.dim(t('multiselectPromptHelp'))}`;
-}
-
 vi.mock('@clack/prompts', () => ({
-  multiselect: vi.fn(),
-  isCancel: vi.fn(() => false),
   cancel: vi.fn(),
   log: {
     error: vi.fn(),
+    message: vi.fn(),
     success: vi.fn(),
   },
+}));
+
+vi.mock('../src/list-prompt.js', () => ({
+  listPromptCancelSymbol: Symbol('list-prompt-cancel'),
+  isListPromptCancel: vi.fn((value) => typeof value === 'symbol'),
+  multiselectListPrompt: vi.fn(),
+  selectListPrompt: vi.fn(),
 }));
 
 vi.mock('../src/base-dir.js', () => ({
@@ -45,7 +48,7 @@ describe('remove command', () => {
 
     await runRemove(['skill-one']);
 
-    expect(prompts.multiselect).not.toHaveBeenCalled();
+    expect(listPrompt.multiselectListPrompt).not.toHaveBeenCalled();
     expect(baseDir.removeBaseSkill).toHaveBeenCalledTimes(1);
     expect(baseDir.removeBaseSkill).toHaveBeenCalledWith('skill-one');
     expect(prompts.log.success).toHaveBeenCalledWith(t('removedSkill', { skillName: 'skill-one' }));
@@ -59,7 +62,7 @@ describe('remove command', () => {
 
     await runRemove(['skill-one', 'skill-two']);
 
-    expect(prompts.multiselect).not.toHaveBeenCalled();
+    expect(listPrompt.multiselectListPrompt).not.toHaveBeenCalled();
     expect(baseDir.removeBaseSkill).toHaveBeenCalledTimes(2);
     expect(baseDir.removeBaseSkill).toHaveBeenNthCalledWith(1, 'skill-one');
     expect(baseDir.removeBaseSkill).toHaveBeenNthCalledWith(2, 'skill-two');
@@ -71,12 +74,13 @@ describe('remove command', () => {
       { directoryName: 'skill-one', managed: true, path: '/base/skill-one' },
       { directoryName: 'skill-two', managed: false, path: '/base/skill-two' },
     ] as never);
-    vi.mocked(prompts.multiselect).mockResolvedValue(['skill-one', 'skill-two']);
+    vi.mocked(listPrompt.multiselectListPrompt).mockResolvedValue(['skill-one', 'skill-two']);
 
     await runRemove();
 
-    expect(prompts.multiselect).toHaveBeenCalledWith({
-      message: withMultiselectHelp(t('selectSkillsToRemove')),
+    expect(prompts.log.message).toHaveBeenCalledWith(pc.dim(t('multiselectPromptHelp')));
+    expect(listPrompt.multiselectListPrompt).toHaveBeenCalledWith({
+      message: t('selectSkillsToRemove'),
       options: [
         { value: 'skill-one', label: 'skill-one' },
         { value: 'skill-two', label: 'skill-two' },
@@ -90,13 +94,11 @@ describe('remove command', () => {
   });
 
   it('stops when the interactive removal is cancelled', async () => {
-    const cancelSymbol = Symbol('cancel');
-
     vi.mocked(baseDir.listBaseSkills).mockResolvedValue([
       { directoryName: 'skill-one', managed: true, path: '/base/skill-one' },
     ] as never);
-    vi.mocked(prompts.multiselect).mockResolvedValue(cancelSymbol as never);
-    vi.mocked(prompts.isCancel).mockReturnValue(true);
+    vi.mocked(listPrompt.multiselectListPrompt).mockResolvedValue(listPrompt.listPromptCancelSymbol as never);
+    vi.mocked(listPrompt.isListPromptCancel).mockReturnValue(true);
 
     await runRemove();
 
@@ -130,4 +132,3 @@ describe('remove command', () => {
     expect(prompts.log.error).toHaveBeenCalledWith(t('noSkillsAvailableInBaseDir'));
   });
 });
-

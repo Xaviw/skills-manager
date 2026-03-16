@@ -121,7 +121,7 @@ describe('core modules', () => {
 
     const promptMultiselect = vi.fn().mockResolvedValue(['skill-one']);
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-    await runUpdate({ isInteractive: true, promptMultiselect: promptMultiselect as never });
+    await runUpdate({ isInteractive: true, promptMultiselect: promptMultiselect as never, logPromptHelp: () => {} });
 
     const lock = await readSkillLock();
     expect(lock.skills['skill-one']?.skillFolderHash).toBe('new-hash');
@@ -262,7 +262,7 @@ describe('core modules', () => {
     vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
 
     const promptMultiselect = vi.fn().mockResolvedValue(['skill-one']);
-    await runUpdate({ isInteractive: true, promptMultiselect: promptMultiselect as never });
+    await runUpdate({ isInteractive: true, promptMultiselect: promptMultiselect as never, logPromptHelp: () => {} });
 
     const lock = await readSkillLock();
     expect(lock.skills['skill-one']?.skillFolderHash).toBe('new-hash');
@@ -315,7 +315,7 @@ describe('core modules', () => {
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     const originalExitCode = process.exitCode;
 
-    await runUpdate({ isInteractive: true, promptMultiselect: promptMultiselect as never });
+    await runUpdate({ isInteractive: true, promptMultiselect: promptMultiselect as never, logPromptHelp: () => {} });
 
     const lock = await readSkillLock();
     expect(lock.skills['skill-one']?.skillFolderHash).toBe('new-hash-1');
@@ -331,5 +331,4 @@ describe('core modules', () => {
     rmSync(sourceRepo, { recursive: true, force: true });
   });
 });
-
 

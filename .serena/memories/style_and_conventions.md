@@ -1,0 +1,24 @@
+# style and conventions
+
+- Language/runtime: strict TypeScript targeting modern Node (`ES2023`, `NodeNext`, ESM imports with `.js` extensions in source imports).
+- TypeScript config: `strict: true`, `noUncheckedIndexedAccess: true`, `verbatimModuleSyntax: true`, `resolveJsonModule: true`.
+- Formatting style inferred from source:
+  - single quotes
+  - semicolons enabled
+  - trailing commas in multiline literals/calls
+  - 2-space indentation
+  - named exports for command helpers and utility functions
+- Naming:
+  - camelCase for variables/functions
+  - PascalCase for interfaces/types
+  - descriptive function names such as `parseAddOptions`, `resolveDirectoryName`, `runAdd`
+- Error handling pattern:
+  - command runners catch errors, print translated CLI messages via `@clack/prompts` / i18n helper `t(...)`, then exit with non-zero status when needed.
+  - interactive cancellation is treated explicitly via `p.isCancel(...)`.
+- Testing conventions:
+  - Vitest with `describe` / `it` / `expect` / `vi`
+  - tests favor real temp directories and filesystem interactions over heavy abstraction
+  - filenames use `*.test.ts`
+- Documentation/comments:
+  - code is mostly self-explanatory and sparsely commented; preserve that style unless a block is genuinely non-obvious.
+- There is no dedicated lint or formatter config in the repo at onboarding time; rely on existing file style and TypeScript compiler feedback.

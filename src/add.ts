@@ -1,12 +1,12 @@
 import * as p from '@clack/prompts';
-import pc from 'picocolors';
 import { relative } from 'path';
 import { hasBaseSkillDirectory, installSkillToBaseDir } from './base-dir.js';
 import { sanitizeName } from './filesystem.js';
 import { cloneRepo, cleanupTempDir } from './git.js';
 import { t } from './i18n.js';
+import { isListPromptCancel, multiselectListPrompt } from './list-prompt.js';
 import { ensureBaseDir, getBaseDir } from './paths.js';
-import { formatPromptHint } from './prompt-format.js';
+import { formatPromptHint, showPromptHelp } from './prompt-format.js';
 import { getOwnerRepo, parseSource } from './source-parser.js';
 import { fetchSkillFolderHash, getGitHubToken } from './skill-lock.js';
 import { discoverSkills, filterSkills } from './skills.js';
@@ -123,8 +123,9 @@ export async function runAdd(sourceInput: string | undefined, options: AddOption
         process.exit(1);
       }
     } else {
-      const picked = await p.multiselect({
-        message: `${t('selectSkillsToInstall')} ${pc.dim(t('multiselectPromptHelp'))}`,
+      showPromptHelp(t('multiselectPromptHelp'));
+      const picked = await multiselectListPrompt({
+        message: t('selectSkillsToInstall'),
         options: discoveredSkills.map((skill) => ({
           value: skill.name,
           label: skill.name,
@@ -134,7 +135,7 @@ export async function runAdd(sourceInput: string | undefined, options: AddOption
         required: true,
       });
 
-      if (p.isCancel(picked)) {
+      if (isListPromptCancel(picked)) {
         p.cancel(t('installationCancelled'));
         process.exit(0);
       }
@@ -183,4 +184,3 @@ export async function runAdd(sourceInput: string | undefined, options: AddOption
     }
   }
 }
-

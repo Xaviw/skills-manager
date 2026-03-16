@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
-import { formatPromptHint } from '../src/prompt-format.js';
+import { describe, expect, it, vi } from 'vitest';
+import pc from 'picocolors';
+import { formatPromptHint, showPromptHelp } from '../src/prompt-format.js';
 
 describe('prompt format helpers', () => {
   it('returns undefined for blank values', () => {
@@ -17,5 +18,13 @@ describe('prompt format helpers', () => {
   it('handles very small max lengths', () => {
     expect(formatPromptHint('abcdef', 3)).toBe('...');
     expect(formatPromptHint('abcdef', 2)).toBe('..');
+  });
+
+  it('logs prompt help as a dimmed standalone line', () => {
+    const logMessage = vi.fn();
+
+    showPromptHelp('↑↓ 切换 · Enter 确认 · ESC 取消', logMessage);
+
+    expect(logMessage).toHaveBeenCalledWith(pc.dim('↑↓ 切换 · Enter 确认 · ESC 取消'));
   });
 });

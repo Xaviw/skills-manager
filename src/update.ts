@@ -1,10 +1,10 @@
 import * as p from '@clack/prompts';
 import { relative } from 'path';
-import pc from 'picocolors';
 import { installSkillToBaseDir } from './base-dir.js';
 import { cloneRepo, cleanupTempDir } from './git.js';
 import { t } from './i18n.js';
-import { formatPromptHint } from './prompt-format.js';
+import { isListPromptCancel, multiselectListPrompt } from './list-prompt.js';
+import { formatPromptHint, showPromptHelp } from './prompt-format.js';
 import { discoverSkills } from './skills.js';
 import { fetchSkillFolderHash, getGitHubToken, readSkillLock } from './skill-lock.js';
 import { parseSource } from './source-parser.js';
@@ -27,7 +27,8 @@ function getSkipReason(entry: { sourceType: string; skillFolderHash?: string; sk
 
 export async function runUpdate(options: {
   isInteractive?: boolean;
-  promptMultiselect?: typeof p.multiselect;
+  promptMultiselect?: typeof multiselectListPrompt;
+  logPromptHelp?: (helpText: string) => void;
   skillNames?: string[];
 } = {}): Promise<void> {
   const requestedSkillNames = options.skillNames?.length ? [...new Set(options.skillNames)] : [];
@@ -141,8 +142,9 @@ export async function runUpdate(options: {
   let selectedUpdates = updates;
 
   if (isInteractive) {
-    const selection = await (options.promptMultiselect ?? p.multiselect)({
-      message: `${t('selectSkillsToUpdate')} ${pc.dim(t('multiselectPromptHelp'))}`,
+    (options.logPromptHelp ?? showPromptHelp)(t('multiselectPromptHelp'));
+    const selection = await (options.promptMultiselect ?? multiselectListPrompt)({
+      message: t('selectSkillsToUpdate'),
       options: updates.map((update) => ({
         value: update.directoryName,
         label:
@@ -155,7 +157,7 @@ export async function runUpdate(options: {
       required: true,
     });
 
-    if (p.isCancel(selection)) {
+    if (isListPromptCancel(selection)) {
       p.cancel(t('updateCancelled'));
       return;
     }
@@ -228,4 +230,3 @@ export async function runUpdate(options: {
     process.exitCode = 1;
   }
 }
-

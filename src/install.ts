@@ -1,9 +1,10 @@
 import * as p from '@clack/prompts';
 import { mkdir } from 'fs/promises';
 import { isAbsolute, resolve } from 'path';
-import pc from 'picocolors';
 import { t } from './i18n.js';
+import { isListPromptCancel, multiselectListPrompt, selectListPrompt } from './list-prompt.js';
 import { installBaseSkillToProject, listBaseSkills } from './base-dir.js';
+import { showPromptHelp } from './prompt-format.js';
 
 export interface InstallOptions {
   all?: boolean;
@@ -49,15 +50,16 @@ function resolveTargetDir(inputDir: string): string {
 }
 
 export async function promptForTargetDir(
-  promptSelect: typeof p.select = p.select,
+  promptSelect: typeof selectListPrompt = selectListPrompt,
   promptText: typeof p.text = p.text
 ): Promise<string | symbol> {
+  showPromptHelp(t('selectPromptHelp'));
   const picked = await promptSelect({
-    message: `${t('targetDirectory')} ${pc.dim(t('selectPromptHelp'))}`,
+    message: t('targetDirectory'),
     options: [...INSTALL_TARGET_SHORTCUTS],
   });
 
-  if (p.isCancel(picked)) {
+  if (p.isCancel(picked) || isListPromptCancel(picked)) {
     return picked;
   }
 
@@ -85,8 +87,9 @@ export async function runInstall(options: InstallOptions): Promise<void> {
 
   let selectedNames = skills.map((skill) => skill.directoryName);
   if (!options.all) {
-    const selection = await p.multiselect({
-      message: `${t('selectSkillsToInstallIntoProject')} ${pc.dim(t('multiselectPromptHelp'))}`,
+    showPromptHelp(t('multiselectPromptHelp'));
+    const selection = await multiselectListPrompt({
+      message: t('selectSkillsToInstallIntoProject'),
       options: skills.map((skill) => ({
         value: skill.directoryName,
         label: skill.directoryName,
@@ -95,7 +98,7 @@ export async function runInstall(options: InstallOptions): Promise<void> {
       required: true,
     });
 
-    if (p.isCancel(selection)) {
+    if (isListPromptCancel(selection)) {
       p.cancel(t('installationCancelled'));
       process.exit(0);
     }
@@ -107,7 +110,7 @@ export async function runInstall(options: InstallOptions): Promise<void> {
   if (!targetDirInput) {
     const response = await promptForTargetDir();
 
-    if (p.isCancel(response)) {
+    if (p.isCancel(response) || isListPromptCancel(response)) {
       p.cancel(t('installationCancelled'));
       process.exit(0);
     }
@@ -117,15 +120,16 @@ export async function runInstall(options: InstallOptions): Promise<void> {
 
   let mode: 'copy' | 'link' = options.link ? 'link' : 'copy';
   if (!options.link && !options.copy) {
-    const picked = await p.select({
-      message: `${t('installationMode')} ${pc.dim(t('selectPromptHelp'))}`,
+    showPromptHelp(t('selectPromptHelp'));
+    const picked = await selectListPrompt({
+      message: t('installationMode'),
       options: [
         { value: 'link', label: t('symlink') },
         { value: 'copy', label: t('copy') },
       ],
     });
 
-    if (p.isCancel(picked)) {
+    if (isListPromptCancel(picked)) {
       p.cancel(t('installationCancelled'));
       process.exit(0);
     }
@@ -149,4 +153,3 @@ export async function runInstall(options: InstallOptions): Promise<void> {
     })
   );
 }
-
