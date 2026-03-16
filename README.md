@@ -1,4 +1,4 @@
-# skls
+# skls-mgr
 
 [简体中文](./README-CN.md)
 
@@ -12,17 +12,17 @@ This project is inspired by [`vercel-labs/skills`](<https://www.google.com/searc
 
 ## Quick Start
 
-Find your target skills on [skills.sh](https://skills.sh/), and simply replace `skills` with `skls` in the installation command:
+Find your target skills on [skills.sh](https://skills.sh/), and simply replace `skills` with `skls-mgr` in the installation command:
 
 ```bash
-npx skls add https://github.com/vercel-labs/skills --skill find-skills
+npx skls-mgr add https://github.com/vercel-labs/skills --skill find-skills
 
 ```
 
-Once installed, the skills will be copied to the `~/.config/skls` directory. You can then run the following in any project:
+Once installed, the skills will be copied to the `~/.config/skls-mgr` directory. You can then run the following in any project:
 
 ```bash
-npx skls install
+npx skls-mgr install
 
 ```
 
@@ -31,7 +31,7 @@ Select the skills required for your project through the interactive interface. T
 ## Adding Skills
 
 ```bash
-npx skls add <source>
+npx skls-mgr add <source>
 
 ```
 
@@ -47,32 +47,32 @@ By default, this opens an interactive interface listing all available skills fro
 
 ```bash
 # GitHub shorthand (owner/repo)
-npx skls add vercel-labs/skills
+npx skls-mgr add vercel-labs/skills
 
 # GitHub repository URL
-npx skls add https://github.com/vercel-labs/skills
+npx skls-mgr add https://github.com/vercel-labs/skills
 
 # Sub-path within a GitHub repository
-npx skls add https://github.com/vercel-labs/skills/tree/main/skills/find-skills
+npx skls-mgr add https://github.com/vercel-labs/skills/tree/main/skills/find-skills
 
 # Any Git URL
-npx skls add https://github.com/vercel-labs/skills.git
-npx skls add git@github.com:vercel-labs/skills.git
+npx skls-mgr add https://github.com/vercel-labs/skills.git
+npx skls-mgr add git@github.com:vercel-labs/skills.git
 
 # Local path (copy)
-npx skls add ./my-local-skills
+npx skls-mgr add ./my-local-skills
 
 # Install specific skills (repeated flags)
-npx skls add vercel-labs/agent-skills --skill frontend-design --skill skill-creator
+npx skls-mgr add vercel-labs/agent-skills --skill frontend-design --skill skill-creator
 
 # Install specific skills (multiple names after a single flag)
-npx skls add vercel-labs/agent-skills --skill frontend-design skill-creator
+npx skls-mgr add vercel-labs/agent-skills --skill frontend-design skill-creator
 
 ```
 
 ### Conflict Resolution
 
-If the directory name of the skill being installed conflicts with an existing top-level directory in `~/.config/skls`:
+If the directory name of the skill being installed conflicts with an existing top-level directory in `~/.config/skls-mgr`:
 
 - **Interactive Mode**: You will be prompted to enter a new directory name.
 - **Non-interactive Mode**: If `--skill` is used, the command will terminate immediately without automatic renaming.
@@ -80,11 +80,11 @@ If the directory name of the skill being installed conflicts with an existing to
 ## Installing to Projects
 
 ```bash
-npx skls install
+npx skls-mgr install
 
 ```
 
-By default, this opens an interactive interface listing all top-level directories in `~/.config/skls` (including manually created skills).
+By default, this opens an interactive interface listing all top-level directories in `~/.config/skls-mgr` (including manually created skills).
 
 ### Options
 
@@ -99,20 +99,20 @@ By default, this opens an interactive interface listing all top-level directorie
 
 ```bash
 # Interactive installation to a project
-npx skls install
+npx skls-mgr install
 
 # Copy all skills to the Claude Code skills directory
-npx skls install --all --dir ./.claude/skills --copy
+npx skls-mgr install --all --dir ./.claude/skills --copy
 
 # Interactively select skills and link them to the .agents/skills directory
 # Flags can be combined; missing arguments will be prompted interactively
-npx skls install --dir ./.agents/skills --link
+npx skls-mgr install --dir ./.agents/skills --link
 
 ```
 
 ### Overwrite Policy
 
-If a skill directory with the same name already exists in the target project, `skls install` will overwrite it directly without further confirmation.
+If a skill directory with the same name already exists in the target project, `skls-mgr install` will overwrite it directly without further confirmation.
 
 When `--link` is selected, if the current environment does not support creating symbolic links, it will automatically fall back to a direct copy.
 
@@ -120,31 +120,31 @@ When `--link` is selected, if the current environment does not support creating 
 
 | Command                      | Description                                                                            |
 | ---------------------------- | -------------------------------------------------------------------------------------- |
-| `npx skls list`              | List all skills in `~/.config/skls`, distinguishing between managed and manual skills. |
-| `npx skls update [names...]` | Update one or more skills. Opens interactive mode if no names are provided.            |
-| `npx skls remove [names...]` | Remove one or more skills. Opens interactive mode if no names are provided.            |
+| `npx skls-mgr list`              | List all skills in `~/.config/skls-mgr`, distinguishing between managed and manual skills. |
+| `npx skls-mgr update [names...]` | Update one or more skills. Opens interactive mode if no names are provided.            |
+| `npx skls-mgr remove [names...]` | Remove one or more skills. Opens interactive mode if no names are provided.            |
 
 ### Examples
 
 ```bash
 # Display all skills (including manually added ones)
-npx skls list
+npx skls-mgr list
 
 # Interactive update
-npx skls update
+npx skls-mgr update
 
 # Force update specific skills by name
-npx skls update skill1 skill2
+npx skls-mgr update skill1 skill2
 
 # Interactive removal
-npx skls remove
+npx skls-mgr remove
 
 # Remove specific skills by name
-npx skls remove skill1 skill2
+npx skls-mgr remove skill1 skill2
 
 ```
 
-> `skls update` relies on the GitHub API. To avoid rate limits for anonymous requests (60 per hour), it is recommended to configure `GITHUB_TOKEN` or `GH_TOKEN` in your environment variables to increase the quota (5000 per hour).
+> `skls-mgr update` relies on the GitHub API. To avoid rate limits for anonymous requests (60 per hour), it is recommended to configure `GITHUB_TOKEN` or `GH_TOKEN` in your environment variables to increase the quota (5000 per hour).
 
 ## License
 

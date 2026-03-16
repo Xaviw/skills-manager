@@ -17,7 +17,7 @@ export class GitCloneError extends Error {
 }
 
 export async function cloneRepo(url: string, ref?: string): Promise<string> {
-  const tempDir = await mkdtemp(join(tmpdir(), 'skls-'));
+  const tempDir = await mkdtemp(join(tmpdir(), 'skls-mgr-'));
   const git = simpleGit({
     timeout: { block: CLONE_TIMEOUT_MS },
   });

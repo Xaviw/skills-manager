@@ -111,7 +111,7 @@ export async function fetchSkillFolderHash(
       const response = await fetchImpl(`https://api.github.com/repos/${ownerRepo}/git/trees/${branch}?recursive=1`, {
         headers: {
           Accept: 'application/vnd.github.v3+json',
-          'User-Agent': 'skls',
+          'User-Agent': 'skls-mgr',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
       });

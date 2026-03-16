@@ -15,16 +15,16 @@ async function createSkill(dir: string, name: string, description = 'desc'): Pro
   );
 }
 
-describe('skls cli integration', () => {
+describe('skls-mgr cli integration', () => {
   let homeDir: string;
   let repoDir: string;
   let projectDir: string;
   const locale = resolveCliLocale();
 
   beforeEach(async () => {
-    homeDir = await mkdtemp(join(tmpdir(), 'skls-home-'));
-    repoDir = await mkdtemp(join(tmpdir(), 'skls-repo-'));
-    projectDir = await mkdtemp(join(tmpdir(), 'skls-project-'));
+    homeDir = await mkdtemp(join(tmpdir(), 'skls-mgr-home-'));
+    repoDir = await mkdtemp(join(tmpdir(), 'skls-mgr-repo-'));
+    projectDir = await mkdtemp(join(tmpdir(), 'skls-mgr-project-'));
 
     await createSkill(join(repoDir, 'skills', 'skill-one'), 'skill-one', 'managed one');
     await createSkill(join(repoDir, 'skills', 'skill-two'), 'skill-two', 'managed two');
@@ -44,8 +44,8 @@ describe('skls cli integration', () => {
     const addResult = runCli(['add', repoDir, '--skill', 'skill-one'], projectDir, env);
     expect(addResult.exitCode).toBe(0);
 
-    const baseDir = join(homeDir, '.config', 'skls');
-    const lockContent = JSON.parse(await readFile(join(baseDir, '.skls-lock.json'), 'utf-8'));
+    const baseDir = join(homeDir, '.config', 'skls-mgr');
+    const lockContent = JSON.parse(await readFile(join(baseDir, '.skls-mgr-lock.json'), 'utf-8'));
     expect(lockContent.skills['skill-one']).toBeDefined();
 
     await createSkill(join(baseDir, 'manual-skill'), 'manual-skill', 'manual');
@@ -66,13 +66,13 @@ describe('skls cli integration', () => {
     expect(existsSync(join(baseDir, 'skill-one'))).toBe(false);
     expect(existsSync(join(baseDir, 'manual-skill'))).toBe(false);
 
-    const updatedLockContent = JSON.parse(await readFile(join(baseDir, '.skls-lock.json'), 'utf-8'));
+    const updatedLockContent = JSON.parse(await readFile(join(baseDir, '.skls-mgr-lock.json'), 'utf-8'));
     expect(updatedLockContent.skills['skill-one']).toBeUndefined();
   });
 
   it('fails in non-interactive mode when the target directory name already exists', async () => {
     const env = { USERPROFILE: homeDir, HOME: homeDir };
-    const baseDir = join(homeDir, '.config', 'skls');
+    const baseDir = join(homeDir, '.config', 'skls-mgr');
     await createSkill(join(baseDir, 'skill-one'), 'skill-one');
 
     const result = runCli(['add', repoDir, '--skill', 'skill-one'], projectDir, env);

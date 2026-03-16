@@ -6,7 +6,7 @@ type MessageValue = string | ((params: MessageParams) => string);
 const withParams = (fn: (params: MessageParams) => string): MessageValue => fn;
 
 const enMessages = {
-  helpText: `Usage: skls <command> [options]
+  helpText: `Usage: skls-mgr <command> [options]
 
 Commands:
   add <source>               Add skills into BaseDir
@@ -28,7 +28,7 @@ General:
   -h, --help                 Show help
   -v, --version              Show version`,
   unknownCommand: withParams(({ command }) => `Unknown command: ${command}`),
-  runHelpForUsage: 'Run skls --help for usage.',
+  runHelpForUsage: 'Run skls-mgr --help for usage.',
   directoryExistsPrompt: withParams(({ defaultName }) =>
     `Directory "${defaultName}" already exists. Enter a new directory name`
   ),
@@ -94,7 +94,7 @@ General:
 type TranslationKey = keyof typeof enMessages;
 
 const zhMessages: Record<TranslationKey, MessageValue> = {
-  helpText: `用法: skls <command> [options]
+  helpText: `用法: skls-mgr <command> [options]
 
 命令:
   add <source>               添加技能到 BaseDir
@@ -116,7 +116,7 @@ const zhMessages: Record<TranslationKey, MessageValue> = {
   -h, --help                 显示帮助
   -v, --version              显示版本`,
   unknownCommand: withParams(({ command }) => `未知命令：${command}`),
-  runHelpForUsage: '运行 skls --help 查看用法。',
+  runHelpForUsage: '运行 skls-mgr --help 查看用法。',
   directoryExistsPrompt: withParams(({ defaultName }) => `目录 "${defaultName}" 已存在，请输入新的目录名`),
   directoryNameRequired: '目录名不能为空。',
   skillDirectoryConflict: withParams(({ directoryName }) =>

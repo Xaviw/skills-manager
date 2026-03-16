@@ -26,7 +26,7 @@ describe('core modules', () => {
   const locale = resolveCliLocale();
 
   beforeEach(async () => {
-    homeDir = await mkdtemp(join(tmpdir(), 'skls-home-'));
+    homeDir = await mkdtemp(join(tmpdir(), 'skls-mgr-home-'));
     originalHome = process.env.USERPROFILE;
     process.env.USERPROFILE = homeDir;
     process.env.HOME = homeDir;
@@ -91,7 +91,7 @@ describe('core modules', () => {
   });
 
   it('updates a managed skill and refreshes the stored hash', async () => {
-    const sourceRepo = await mkdtemp(join(tmpdir(), 'skls-source-'));
+    const sourceRepo = await mkdtemp(join(tmpdir(), 'skls-mgr-source-'));
     const sourceSkillDir = join(sourceRepo, 'skills', 'skill-one');
     await createSkill(sourceSkillDir, 'skill-one', '# version 2');
 
@@ -129,8 +129,8 @@ describe('core modules', () => {
   });
 
   it('updates only the requested skill names without prompting', async () => {
-    const sourceRepo = await mkdtemp(join(tmpdir(), 'skls-source-'));
-    const installedRepo = await mkdtemp(join(tmpdir(), 'skls-installed-'));
+    const sourceRepo = await mkdtemp(join(tmpdir(), 'skls-mgr-source-'));
+    const installedRepo = await mkdtemp(join(tmpdir(), 'skls-mgr-installed-'));
     const sourceSkillOneDir = join(sourceRepo, 'skills', 'skill-one');
     const sourceSkillTwoDir = join(sourceRepo, 'skills', 'skill-two');
     const installedSkillOneDir = join(installedRepo, 'skills', 'skill-one');
@@ -202,7 +202,7 @@ describe('core modules', () => {
   });
 
   it('exits when a requested skill exists but cannot be updated', async () => {
-    const localSource = await mkdtemp(join(tmpdir(), 'skls-local-'));
+    const localSource = await mkdtemp(join(tmpdir(), 'skls-mgr-local-'));
     const localSkillDir = join(localSource, 'local-skill');
     await createSkill(localSkillDir, 'local-skill', '# local version');
 
@@ -226,7 +226,7 @@ describe('core modules', () => {
   });
 
   it('updates GitHub-backed git URL skills when tracking metadata is present', async () => {
-    const sourceRepo = await mkdtemp(join(tmpdir(), 'skls-source-'));
+    const sourceRepo = await mkdtemp(join(tmpdir(), 'skls-mgr-source-'));
     const sourceSkillDir = join(sourceRepo, 'skills', 'skill-one');
     await createSkill(sourceSkillDir, 'skill-one', '# version 2');
 
@@ -262,7 +262,7 @@ describe('core modules', () => {
   });
 
   it('continues updating other selected skills when one update fails', async () => {
-    const sourceRepo = await mkdtemp(join(tmpdir(), 'skls-source-'));
+    const sourceRepo = await mkdtemp(join(tmpdir(), 'skls-mgr-source-'));
     const validSkillDir = join(sourceRepo, 'skills', 'skill-one');
     const missingSkillDir = join(sourceRepo, 'skills', 'skill-two');
     await createSkill(validSkillDir, 'skill-one', '# version 2');

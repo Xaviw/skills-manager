@@ -1,12 +1,12 @@
 {
-  "name": "skls",
+  "name": "skls-mgr",
   "version": "0.1.0",
   "description": "Agent skills manager: Centralized maintenance, on-demand installation, and automatic synchronization.",
   "license": "MIT",
   "author": "xavi",
   "type": "module",
   "bin": {
-    "skls": "./bin/cli.mjs"
+    "skls-mgr": "./bin/cli.mjs"
   },
   "files": [
     "bin",

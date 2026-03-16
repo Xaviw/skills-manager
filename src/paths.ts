@@ -4,7 +4,7 @@ import { mkdir } from 'fs/promises';
 import { LOCK_FILE_NAME } from './constants.js';
 
 export function getBaseDir(): string {
-  return join(homedir(), '.config', 'skls');
+  return join(homedir(), '.config', 'skls-mgr');
 }
 
 export function getLockFilePath(): string {
