@@ -258,4 +258,3 @@ describe('install command helpers', () => {
   });
 });
 
-

@@ -4,6 +4,7 @@ import pc from 'picocolors';
 import { installSkillToBaseDir } from './base-dir.js';
 import { cloneRepo, cleanupTempDir } from './git.js';
 import { t } from './i18n.js';
+import { formatPromptHint } from './prompt-format.js';
 import { discoverSkills } from './skills.js';
 import { fetchSkillFolderHash, getGitHubToken, readSkillLock } from './skill-lock.js';
 import { parseSource } from './source-parser.js';
@@ -148,7 +149,7 @@ export async function runUpdate(options: {
           update.entry.displayName && update.entry.displayName !== update.directoryName
             ? `${update.directoryName} (${update.entry.displayName})`
             : update.directoryName,
-        hint: update.entry.source,
+        hint: formatPromptHint(update.entry.source),
       })),
       initialValues: updates.map((update) => update.directoryName),
       required: true,

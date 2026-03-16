@@ -6,6 +6,7 @@ import { sanitizeName } from './filesystem.js';
 import { cloneRepo, cleanupTempDir } from './git.js';
 import { t } from './i18n.js';
 import { ensureBaseDir, getBaseDir } from './paths.js';
+import { formatPromptHint } from './prompt-format.js';
 import { getOwnerRepo, parseSource } from './source-parser.js';
 import { fetchSkillFolderHash, getGitHubToken } from './skill-lock.js';
 import { discoverSkills, filterSkills } from './skills.js';
@@ -127,7 +128,7 @@ export async function runAdd(sourceInput: string | undefined, options: AddOption
         options: discoveredSkills.map((skill) => ({
           value: skill.name,
           label: skill.name,
-          hint: skill.description,
+          hint: formatPromptHint(skill.description),
         })),
         initialValues: discoveredSkills.map((skill) => skill.name),
         required: true,

@@ -95,9 +95,15 @@ describe('core modules', () => {
     const sourceSkillDir = join(sourceRepo, 'skills', 'skill-one');
     await createSkill(sourceSkillDir, 'skill-one', '# version 2');
 
+    const trackedSource = [
+      'owner/repo',
+      'with a deliberately long line that should be collapsed for the picker hint',
+      'before it reaches the terminal renderer',
+    ].join('\n');
+
     await installSkillToBaseDir(sourceSkillDir, 'skill-one', {
       displayName: 'skill-one',
-      source: 'owner/repo',
+      source: trackedSource,
       sourceType: 'github',
       sourceUrl: sourceRepo,
       skillPath: 'skills/skill-one/SKILL.md',
@@ -123,6 +129,13 @@ describe('core modules', () => {
     const skillContent = await readFile(join(getBaseDir(), 'skill-one', 'SKILL.md'), 'utf-8');
     expect(skillContent).toContain('# version 2');
     expect(promptMultiselect).toHaveBeenCalledTimes(1);
+    const [promptCall] = promptMultiselect.mock.calls;
+    const promptOption = promptCall?.[0].options[0];
+    expect(promptOption?.value).toBe('skill-one');
+    expect(promptOption?.label).toBe('skill-one');
+    expect(promptOption?.hint).toContain('owner/repo');
+    expect(promptOption?.hint).toContain('...');
+    expect(promptOption?.hint).not.toContain('\n');
     expect(logSpy).toHaveBeenCalledWith(t('updatedSkills', { count: 1 }, locale));
 
     rmSync(sourceRepo, { recursive: true, force: true });
@@ -318,3 +331,5 @@ describe('core modules', () => {
     rmSync(sourceRepo, { recursive: true, force: true });
   });
 });
+
+

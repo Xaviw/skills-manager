@@ -1,6 +1,6 @@
 {
   "name": "skls-mgr",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Agent skills manager: Centralized maintenance, on-demand installation, and automatic synchronization.",
   "license": "MIT",
   "author": "xavi",
