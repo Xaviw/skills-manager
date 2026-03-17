@@ -13,6 +13,10 @@ import {
   selectListPrompt,
 } from './list-prompt.js';
 import { showPromptHelp } from './prompt-format.js';
+import {
+  addSavedTargetDirectory,
+  readSavedTargetDirectories,
+} from './skill-lock.js';
 
 export interface InstallOptions {
   all?: boolean;
@@ -28,6 +32,7 @@ interface EditableTargetDirectoryOption {
 
 interface PromptForTargetDirDependencies {
   promptTargetDir?: typeof editableTargetDirectoryPrompt;
+  readSavedTargetDirectories?: typeof readSavedTargetDirectories;
 }
 
 interface RunInstallDependencies {
@@ -35,6 +40,7 @@ interface RunInstallDependencies {
   promptMultiselect?: typeof multiselectListPrompt;
   promptSelect?: typeof selectListPrompt;
   logPromptHelp?: typeof showPromptHelp;
+  saveTargetDirectory?: typeof addSavedTargetDirectory;
 }
 
 const S_STEP_ACTIVE = pc.green('◆');
@@ -44,11 +50,14 @@ const S_BAR = pc.dim('│');
 const S_FOOT = pc.dim('└');
 const S_POINTER = pc.cyan('❯');
 const INPUT_CURSOR = pc.inverse(' ');
+const INSTALL_TARGET_SHORTCUT_VALUES = new Set<string>([
+  '.agents/skills/',
+  '.claude/skills/',
+]);
 
 export const INSTALL_TARGET_SHORTCUTS = [
   { value: '.agents/skills/', label: '.agents/skills/' },
   { value: '.claude/skills/', label: '.claude/skills/' },
-  { value: '__custom__', label: t('customPathLabel') },
 ] as const;
 
 export function parseInstallOptions(args: string[]): InstallOptions {
@@ -124,12 +133,23 @@ function isPrintableInput(str: string, key: readline.Key): boolean {
   );
 }
 
-function buildEditableTargetDirectoryOptions(): EditableTargetDirectoryOption[] {
+function buildEditableTargetDirectoryOptions(
+  savedTargetDirectories: string[] = [],
+): EditableTargetDirectoryOption[] {
+  const customDirectoryOptions = savedTargetDirectories
+    .filter((entry) => !INSTALL_TARGET_SHORTCUT_VALUES.has(entry))
+    .map((entry) => ({ value: entry }));
+
   return [
     { value: INSTALL_TARGET_SHORTCUTS[0].value },
     { value: INSTALL_TARGET_SHORTCUTS[1].value },
+    ...customDirectoryOptions,
     { value: '', placeholder: t('customPathLabel') },
   ];
+}
+
+function shouldSaveTargetDirectory(targetDir: string): boolean {
+  return !INSTALL_TARGET_SHORTCUT_VALUES.has(targetDir.trim());
 }
 
 function buildActiveLine(
@@ -299,8 +319,13 @@ export async function editableTargetDirectoryPrompt(options: {
 export async function promptForTargetDir(
   dependencies: PromptForTargetDirDependencies = {},
 ): Promise<string | symbol> {
+  const savedTargetDirectories = await (
+    dependencies.readSavedTargetDirectories ?? readSavedTargetDirectories
+  )();
+
   return (dependencies.promptTargetDir ?? editableTargetDirectoryPrompt)({
     message: t('targetDirectory'),
+    entries: buildEditableTargetDirectoryOptions(savedTargetDirectories),
   });
 }
 
@@ -319,6 +344,8 @@ export async function runInstall(
     dependencies.promptMultiselect ?? multiselectListPrompt;
   const promptSelect = dependencies.promptSelect ?? selectListPrompt;
   const promptTargetDir = dependencies.promptForTargetDir ?? promptForTargetDir;
+  const saveTargetDirectory =
+    dependencies.saveTargetDirectory ?? addSavedTargetDirectory;
 
   let selectedNames = skills.map((skill) => skill.directoryName);
   if (!options.all) {
@@ -342,6 +369,7 @@ export async function runInstall(
   }
 
   let targetDirInput = options.dir;
+  let shouldPersistTargetDirectory = false;
   if (!targetDirInput) {
     logPromptHelp(t('targetDirectoryPromptHelp'));
     const response = await promptTargetDir();
@@ -352,6 +380,7 @@ export async function runInstall(
     }
 
     targetDirInput = response;
+    shouldPersistTargetDirectory = true;
   }
 
   let mode: 'copy' | 'link' = options.link ? 'link' : 'copy';
@@ -379,6 +408,13 @@ export async function runInstall(
   const results = [];
   for (const skillName of selectedNames) {
     results.push(await installBaseSkillToProject(skillName, targetDir, mode));
+  }
+
+  if (
+    shouldPersistTargetDirectory &&
+    shouldSaveTargetDirectory(targetDirInput)
+  ) {
+    await saveTargetDirectory(targetDirInput.trim()).catch(() => {});
   }
 
   p.log.success(

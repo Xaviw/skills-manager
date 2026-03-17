@@ -66,10 +66,6 @@ export async function removeIfExists(path: string): Promise<void> {
   await rm(path, { recursive: true, force: true }).catch(() => {});
 }
 
-export async function ensureDir(path: string): Promise<void> {
-  await mkdir(path, { recursive: true });
-}
-
 const EXCLUDE_FILES = new Set(['metadata.json']);
 const EXCLUDE_DIRS = new Set(['.git', '__pycache__', 'node_modules']);
 

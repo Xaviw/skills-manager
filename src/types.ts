@@ -28,6 +28,7 @@ export interface ManagedSkillLockEntry {
 export interface ManagedSkillLockFile {
   version: number;
   skills: Record<string, ManagedSkillLockEntry>;
+  targetDirectories: string[];
 }
 
 export interface BaseSkillInfo {

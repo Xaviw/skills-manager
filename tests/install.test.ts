@@ -4,7 +4,7 @@ import { resolve } from 'path';
 import pc from 'picocolors';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as baseDir from '../src/base-dir.js';
-import { resolveCliLocale, t } from '../src/i18n.js';
+import { t } from '../src/i18n.js';
 import {
   INSTALL_TARGET_SHORTCUTS,
   parseInstallOptions,
@@ -12,6 +12,7 @@ import {
   runInstall,
 } from '../src/install.js';
 import * as listPrompt from '../src/list-prompt.js';
+import * as skillLock from '../src/skill-lock.js';
 
 function dimmedSelectHelp(): string {
   return `${pc.dim(t('selectPromptHelp'))}\n`;
@@ -47,6 +48,11 @@ vi.mock('../src/base-dir.js', () => ({
   installBaseSkillToProject: vi.fn(),
 }));
 
+vi.mock('../src/skill-lock.js', () => ({
+  readSavedTargetDirectories: vi.fn(),
+  addSavedTargetDirectory: vi.fn(),
+}));
+
 vi.mock('fs/promises', async () => {
   const actual =
     await vi.importActual<typeof import('fs/promises')>('fs/promises');
@@ -63,7 +69,6 @@ function resolveExpectedTargetDir(targetDir: string): string {
 }
 
 describe('install command helpers', () => {
-  const locale = resolveCliLocale();
   const availableSkills = [
     { directoryName: 'skill-one', managed: true, path: '/base/skill-one' },
     { directoryName: 'skill-two', managed: false, path: '/base/skill-two' },
@@ -79,6 +84,8 @@ describe('install command helpers', () => {
       path: '/project/skill-one',
       linked: false,
     } as never);
+    vi.mocked(skillLock.readSavedTargetDirectories).mockResolvedValue([]);
+    vi.mocked(skillLock.addSavedTargetDirectory).mockResolvedValue(undefined);
     vi.mocked(mkdirMock).mockResolvedValue(undefined);
     vi.mocked(listPrompt.multiselectListPrompt).mockResolvedValue([
       'skill-one',
@@ -102,7 +109,6 @@ describe('install command helpers', () => {
     expect(INSTALL_TARGET_SHORTCUTS).toEqual([
       { value: '.agents/skills/', label: '.agents/skills/' },
       { value: '.claude/skills/', label: '.claude/skills/' },
-      { value: '__custom__', label: t('customPathLabel', {}, locale) },
     ]);
   });
 
@@ -115,7 +121,14 @@ describe('install command helpers', () => {
 
     expect(result).toBe('.agents/skills/');
     expect(prompt).toHaveBeenCalledTimes(1);
-    expect(prompt).toHaveBeenCalledWith({ message: t('targetDirectory') });
+    expect(prompt).toHaveBeenCalledWith({
+      message: t('targetDirectory'),
+      entries: [
+        { value: '.agents/skills/' },
+        { value: '.claude/skills/' },
+        { value: '', placeholder: t('customPathLabel') },
+      ],
+    });
   });
 
   it('supports returning a custom directory value from the editable prompt', async () => {
@@ -126,6 +139,30 @@ describe('install command helpers', () => {
     });
 
     expect(result).toBe('./custom/skills');
+  });
+
+  it('adds saved custom target directories to the editable prompt options', async () => {
+    vi.mocked(skillLock.readSavedTargetDirectories).mockResolvedValue([
+      './shared/skills',
+      '/tmp/custom-skills',
+      '.agents/skills/',
+    ]);
+    const prompt = vi.fn().mockResolvedValue('./shared/skills');
+
+    await promptForTargetDir({
+      promptTargetDir: prompt as never,
+    });
+
+    expect(prompt).toHaveBeenCalledWith({
+      message: t('targetDirectory'),
+      entries: [
+        { value: '.agents/skills/' },
+        { value: '.claude/skills/' },
+        { value: './shared/skills' },
+        { value: '/tmp/custom-skills' },
+        { value: '', placeholder: t('customPathLabel') },
+      ],
+    });
   });
 
   it('returns cancel when the editable target directory prompt is cancelled', async () => {
@@ -353,5 +390,52 @@ describe('install command helpers', () => {
     expect(mkdirMock).not.toHaveBeenCalled();
 
     exitMock.mockRestore();
+  });
+
+  it('records the prompted custom target directory after install', async () => {
+    await runInstall(
+      {},
+      {
+        promptForTargetDir: vi.fn().mockResolvedValue('./custom/skills'),
+      },
+    );
+
+    expect(skillLock.addSavedTargetDirectory).toHaveBeenCalledTimes(1);
+    expect(skillLock.addSavedTargetDirectory).toHaveBeenCalledWith(
+      './custom/skills',
+    );
+  });
+
+  it('ignores target directory persistence failures after a successful install', async () => {
+    await expect(
+      runInstall(
+        {},
+        {
+          promptForTargetDir: vi.fn().mockResolvedValue('./custom/skills'),
+          saveTargetDirectory: vi.fn().mockRejectedValue(new Error('boom')),
+        },
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(baseDir.installBaseSkillToProject).toHaveBeenCalledTimes(1);
+    expect(prompts.log.success).toHaveBeenCalledWith(
+      t('installedSkillsIntoTargetDir', {
+        count: 1,
+        targetDir: resolveExpectedTargetDir('./custom/skills'),
+        linkSuffix: '',
+      }),
+    );
+  });
+
+  it('does not record built-in or flag-provided target directories', async () => {
+    await runInstall(
+      {},
+      {
+        promptForTargetDir: vi.fn().mockResolvedValue('.agents/skills/'),
+      },
+    );
+    await runInstall({ dir: './from-flag' });
+
+    expect(skillLock.addSavedTargetDirectory).not.toHaveBeenCalled();
   });
 });

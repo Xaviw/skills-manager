@@ -10,23 +10,54 @@ function createEmptyLockFile(): ManagedSkillLockFile {
   return {
     version: CURRENT_LOCK_VERSION,
     skills: {},
+    targetDirectories: [],
   };
+}
+
+function normalizeTargetDirectories(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const seen = new Set<string>();
+  const directories: string[] = [];
+  for (const entry of value) {
+    if (typeof entry !== 'string') {
+      continue;
+    }
+
+    const normalized = entry.trim();
+    if (!normalized || seen.has(normalized)) {
+      continue;
+    }
+
+    seen.add(normalized);
+    directories.push(normalized);
+  }
+
+  return directories;
 }
 
 export async function readSkillLock(): Promise<ManagedSkillLockFile> {
   try {
     const content = await readFile(getLockFilePath(), 'utf-8');
-    const parsed = JSON.parse(content) as ManagedSkillLockFile;
+    const parsed = JSON.parse(content) as Partial<ManagedSkillLockFile>;
     if (
       typeof parsed.version !== 'number' ||
-      typeof parsed.skills !== 'object'
+      typeof parsed.skills !== 'object' ||
+      parsed.skills === null
     ) {
       return createEmptyLockFile();
     }
     if (parsed.version < CURRENT_LOCK_VERSION) {
       return createEmptyLockFile();
     }
-    return parsed;
+
+    return {
+      version: parsed.version,
+      skills: parsed.skills as Record<string, ManagedSkillLockEntry>,
+      targetDirectories: normalizeTargetDirectories(parsed.targetDirectories),
+    };
   } catch {
     return createEmptyLockFile();
   }
@@ -45,8 +76,15 @@ export async function writeSkillLock(
 
   await writeFile(
     lockPath,
-    JSON.stringify({ version: lock.version, skills: sortedSkills }, null, 2) +
-      '\n',
+    JSON.stringify(
+      {
+        version: lock.version,
+        skills: sortedSkills,
+        targetDirectories: normalizeTargetDirectories(lock.targetDirectories),
+      },
+      null,
+      2,
+    ) + '\n',
     'utf-8',
   );
 }
@@ -76,6 +114,27 @@ export async function removeSkillFromLock(
   delete lock.skills[directoryName];
   await writeSkillLock(lock);
   return true;
+}
+
+export async function readSavedTargetDirectories(): Promise<string[]> {
+  const lock = await readSkillLock();
+  return lock.targetDirectories;
+}
+
+export async function addSavedTargetDirectory(
+  targetDir: string,
+): Promise<void> {
+  const normalizedTargetDir = targetDir.trim();
+  if (!normalizedTargetDir) {
+    return;
+  }
+
+  const lock = await readSkillLock();
+  lock.targetDirectories = [
+    ...lock.targetDirectories.filter((entry) => entry !== normalizedTargetDir),
+    normalizedTargetDir,
+  ];
+  await writeSkillLock(lock);
 }
 
 export function getGitHubToken(): string | null {
