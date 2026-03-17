@@ -4,27 +4,33 @@ import { pathToFileURL } from 'url';
 
 const CLI_PATH = join(import.meta.dirname, 'cli.ts');
 const TSX_IMPORT_PATH = pathToFileURL(
-  join(import.meta.dirname, '..', 'node_modules', 'tsx', 'dist', 'loader.mjs')
+  join(import.meta.dirname, '..', 'node_modules', 'tsx', 'dist', 'loader.mjs'),
 ).href;
+const ANSI_ESCAPE = '\u001B';
+const ANSI_ESCAPE_PATTERN = new RegExp(`${ANSI_ESCAPE}\\[[0-9;]*m`, 'g');
 
 export function stripAnsi(str: string): string {
-  return str.replace(/\x1b\[[0-9;]*m/g, '');
+  return str.replace(ANSI_ESCAPE_PATTERN, '');
 }
 
 export function runCli(
   args: string[],
   cwd?: string,
   env?: Record<string, string>,
-  input?: string
+  input?: string,
 ): { stdout: string; stderr: string; exitCode: number } {
   try {
-    const output = execFileSync(process.execPath, ['--import', TSX_IMPORT_PATH, CLI_PATH, ...args], {
-      encoding: 'utf-8',
-      cwd,
-      input,
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: env ? { ...process.env, ...env } : process.env,
-    });
+    const output = execFileSync(
+      process.execPath,
+      ['--import', TSX_IMPORT_PATH, CLI_PATH, ...args],
+      {
+        encoding: 'utf-8',
+        cwd,
+        input,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: env ? { ...process.env, ...env } : process.env,
+      },
+    );
 
     return { stdout: stripAnsi(output), stderr: '', exitCode: 0 };
   } catch (error: any) {

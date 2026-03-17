@@ -5,19 +5,27 @@ import pc from 'picocolors';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as baseDir from '../src/base-dir.js';
 import { resolveCliLocale, t } from '../src/i18n.js';
-import { INSTALL_TARGET_SHORTCUTS, parseInstallOptions, promptForTargetDir, runInstall } from '../src/install.js';
+import {
+  INSTALL_TARGET_SHORTCUTS,
+  parseInstallOptions,
+  promptForTargetDir,
+  runInstall,
+} from '../src/install.js';
 import * as listPrompt from '../src/list-prompt.js';
 
 function dimmedSelectHelp(): string {
-  return pc.dim(t('selectPromptHelp'));
+  return `${pc.dim(t('selectPromptHelp'))}\n`;
 }
 
 function dimmedMultiselectHelp(): string {
-  return pc.dim(t('multiselectPromptHelp'));
+  return `${pc.dim(t('multiselectPromptHelp'))}\n`;
+}
+
+function dimmedTargetDirectoryHelp(): string {
+  return `${pc.dim(t('targetDirectoryPromptHelp'))}\n`;
 }
 
 vi.mock('@clack/prompts', () => ({
-  text: vi.fn(),
   cancel: vi.fn(),
   isCancel: vi.fn(() => false),
   log: {
@@ -40,7 +48,8 @@ vi.mock('../src/base-dir.js', () => ({
 }));
 
 vi.mock('fs/promises', async () => {
-  const actual = await vi.importActual<typeof import('fs/promises')>('fs/promises');
+  const actual =
+    await vi.importActual<typeof import('fs/promises')>('fs/promises');
   return {
     ...actual,
     mkdir: vi.fn(),
@@ -48,7 +57,9 @@ vi.mock('fs/promises', async () => {
 });
 
 function resolveExpectedTargetDir(targetDir: string): string {
-  return targetDir.startsWith('.') ? resolve(process.cwd(), targetDir) : targetDir;
+  return targetDir.startsWith('.')
+    ? resolve(process.cwd(), targetDir)
+    : targetDir;
 }
 
 describe('install command helpers', () => {
@@ -61,20 +72,25 @@ describe('install command helpers', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    vi.mocked(baseDir.listBaseSkills).mockResolvedValue(availableSkills as never);
-    vi.mocked(baseDir.installBaseSkillToProject).mockResolvedValue({ path: '/project/skill-one', linked: false } as never);
+    vi.mocked(baseDir.listBaseSkills).mockResolvedValue(
+      availableSkills as never,
+    );
+    vi.mocked(baseDir.installBaseSkillToProject).mockResolvedValue({
+      path: '/project/skill-one',
+      linked: false,
+    } as never);
     vi.mocked(mkdirMock).mockResolvedValue(undefined);
-    vi.mocked(listPrompt.multiselectListPrompt).mockResolvedValue(['skill-one']);
-    vi.mocked(listPrompt.selectListPrompt).mockImplementation(async (options) => {
-      if (options.message === t('targetDirectory')) {
+    vi.mocked(listPrompt.multiselectListPrompt).mockResolvedValue([
+      'skill-one',
+    ]);
+    vi.mocked(listPrompt.selectListPrompt).mockImplementation(
+      async (options) => {
+        if (options.message === t('installationMode')) {
+          return 'copy';
+        }
         return '.agents/skills/';
-      }
-      if (options.message === t('installationMode')) {
-        return 'copy';
-      }
-      return '.agents/skills/';
-    });
-    vi.mocked(prompts.text).mockResolvedValue('./custom/skills');
+      },
+    );
   });
 
   it('parses install flags and aliases', () => {
@@ -90,34 +106,36 @@ describe('install command helpers', () => {
     ]);
   });
 
-  it('returns the selected shortcut directory without asking for custom input', async () => {
-    const select = vi.fn().mockResolvedValue('.agents/skills/');
-    const text = vi.fn();
+  it('returns the selected directory from the editable prompt', async () => {
+    const prompt = vi.fn().mockResolvedValue('.agents/skills/');
 
-    const result = await promptForTargetDir(select as never, text as never);
+    const result = await promptForTargetDir({
+      promptTargetDir: prompt as never,
+    });
 
     expect(result).toBe('.agents/skills/');
-    expect(text).not.toHaveBeenCalled();
+    expect(prompt).toHaveBeenCalledTimes(1);
+    expect(prompt).toHaveBeenCalledWith({ message: t('targetDirectory') });
   });
 
-  it('prompts for a custom directory after selecting the custom option', async () => {
-    const select = vi.fn().mockResolvedValue('__custom__');
-    const text = vi.fn().mockResolvedValue('./custom/skills');
+  it('supports returning a custom directory value from the editable prompt', async () => {
+    const prompt = vi.fn().mockResolvedValue('./custom/skills');
 
-    const result = await promptForTargetDir(select as never, text as never);
+    const result = await promptForTargetDir({
+      promptTargetDir: prompt as never,
+    });
 
     expect(result).toBe('./custom/skills');
-    expect(text).toHaveBeenCalledTimes(1);
   });
 
-  it('returns cancel when the custom list prompt is cancelled', async () => {
-    const select = vi.fn().mockResolvedValue(listPrompt.listPromptCancelSymbol);
-    const text = vi.fn();
+  it('returns cancel when the editable target directory prompt is cancelled', async () => {
+    const prompt = vi.fn().mockResolvedValue(listPrompt.listPromptCancelSymbol);
 
-    const result = await promptForTargetDir(select as never, text as never);
+    const result = await promptForTargetDir({
+      promptTargetDir: prompt as never,
+    });
 
     expect(result).toBe(listPrompt.listPromptCancelSymbol);
-    expect(text).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -241,57 +259,96 @@ describe('install command helpers', () => {
       expectedMode: 'link',
       expectedTargetDir: './out',
     },
-  ])('covers install interaction flow for $name', async ({
-    args,
-    expectSkillSelection,
-    expectDirPrompt,
-    expectModePrompt,
-    expectedInstallCount,
-    expectedMode,
-    expectedTargetDir,
-  }) => {
-    const options = parseInstallOptions(args);
+  ])(
+    'covers install interaction flow for $name',
+    async ({
+      args,
+      expectSkillSelection,
+      expectDirPrompt,
+      expectModePrompt,
+      expectedInstallCount,
+      expectedMode,
+      expectedTargetDir,
+    }) => {
+      const options = parseInstallOptions(args);
+      const promptTargetDir = vi.fn().mockResolvedValue('.agents/skills/');
 
-    await runInstall(options);
+      await runInstall(options, { promptForTargetDir: promptTargetDir });
 
-    expect(listPrompt.multiselectListPrompt).toHaveBeenCalledTimes(expectSkillSelection ? 1 : 0);
+      expect(listPrompt.multiselectListPrompt).toHaveBeenCalledTimes(
+        expectSkillSelection ? 1 : 0,
+      );
+      expect(promptTargetDir).toHaveBeenCalledTimes(expectDirPrompt ? 1 : 0);
 
-    const selectMessages = vi.mocked(listPrompt.selectListPrompt).mock.calls.map(([call]) => call.message);
-    expect(selectMessages.includes(t('targetDirectory'))).toBe(expectDirPrompt);
-    expect(selectMessages.includes(t('installationMode'))).toBe(expectModePrompt);
+      const selectMessages = vi
+        .mocked(listPrompt.selectListPrompt)
+        .mock.calls.map(([call]) => call.message);
+      expect(selectMessages.includes(t('installationMode'))).toBe(
+        expectModePrompt,
+      );
 
-    const multiselectMessages = vi.mocked(listPrompt.multiselectListPrompt).mock.calls.map(([call]) => call.message);
-    expect(multiselectMessages.includes(t('selectSkillsToInstallIntoProject'))).toBe(expectSkillSelection);
+      const multiselectMessages = vi
+        .mocked(listPrompt.multiselectListPrompt)
+        .mock.calls.map(([call]) => call.message);
+      expect(
+        multiselectMessages.includes(t('selectSkillsToInstallIntoProject')),
+      ).toBe(expectSkillSelection);
 
-    const helpMessages = vi.mocked(prompts.log.message).mock.calls.map(([message]) => message);
-    const selectHelpCount = (expectDirPrompt ? 1 : 0) + (expectModePrompt ? 1 : 0);
-    const multiselectHelpCount = expectSkillSelection ? 1 : 0;
-    expect(helpMessages.filter((message) => message === dimmedSelectHelp())).toHaveLength(selectHelpCount);
-    expect(helpMessages.filter((message) => message === dimmedMultiselectHelp())).toHaveLength(multiselectHelpCount);
+      const helpMessages = vi
+        .mocked(prompts.log.message)
+        .mock.calls.map(([message]) => message);
+      const selectHelpCount = expectModePrompt ? 1 : 0;
+      const multiselectHelpCount = expectSkillSelection ? 1 : 0;
+      const targetDirectoryHelpCount = expectDirPrompt ? 1 : 0;
+      expect(
+        helpMessages.filter((message) => message === dimmedSelectHelp()),
+      ).toHaveLength(selectHelpCount);
+      expect(
+        helpMessages.filter((message) => message === dimmedMultiselectHelp()),
+      ).toHaveLength(multiselectHelpCount);
+      expect(
+        helpMessages.filter(
+          (message) => message === dimmedTargetDirectoryHelp(),
+        ),
+      ).toHaveLength(targetDirectoryHelpCount);
 
-    expect(baseDir.installBaseSkillToProject).toHaveBeenCalledTimes(expectedInstallCount);
-    for (const call of vi.mocked(baseDir.installBaseSkillToProject).mock.calls) {
-      expect(call[1]).toBe(resolveExpectedTargetDir(expectedTargetDir));
-      expect(call[2]).toBe(expectedMode);
-    }
+      expect(baseDir.installBaseSkillToProject).toHaveBeenCalledTimes(
+        expectedInstallCount,
+      );
+      for (const call of vi.mocked(baseDir.installBaseSkillToProject).mock
+        .calls) {
+        expect(call[1]).toBe(resolveExpectedTargetDir(expectedTargetDir));
+        expect(call[2]).toBe(expectedMode);
+      }
 
-    expect(mkdirMock).toHaveBeenCalledWith(resolveExpectedTargetDir(expectedTargetDir), { recursive: true });
-  });
+      expect(mkdirMock).toHaveBeenCalledWith(
+        resolveExpectedTargetDir(expectedTargetDir),
+        { recursive: true },
+      );
+    },
+  );
 
   it('cancels install when target directory selection is cancelled', async () => {
-    const exitMock = vi.spyOn(process, 'exit').mockImplementation((code?: string | number | null) => {
-      throw new Error(`process.exit:${code ?? ''}`);
-    });
+    const exitMock = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((code?: string | number | null) => {
+        throw new Error(`process.exit:${code ?? ''}`);
+      });
 
-    vi.mocked(listPrompt.multiselectListPrompt).mockResolvedValue(['skill-one']);
-    vi.mocked(listPrompt.selectListPrompt).mockImplementation(async (options) => {
-      if (options.message === t('targetDirectory')) {
-        return listPrompt.listPromptCancelSymbol;
-      }
-      return 'copy';
-    });
+    vi.mocked(listPrompt.multiselectListPrompt).mockResolvedValue([
+      'skill-one',
+    ]);
 
-    await expect(runInstall({})).rejects.toThrow('process.exit:0');
+    await expect(
+      runInstall(
+        {},
+        {
+          promptForTargetDir: vi
+            .fn()
+            .mockResolvedValue(listPrompt.listPromptCancelSymbol) as never,
+        },
+      ),
+    ).rejects.toThrow('process.exit:0');
     expect(prompts.cancel).toHaveBeenCalledWith(t('installationCancelled'));
     expect(mkdirMock).not.toHaveBeenCalled();
 

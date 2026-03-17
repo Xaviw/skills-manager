@@ -10,7 +10,10 @@ async function pathExists(path: string): Promise<boolean> {
   }
 }
 
-export async function replaceDirectoryWithCopy(sourceDir: string, targetDir: string): Promise<void> {
+export async function replaceDirectoryWithCopy(
+  sourceDir: string,
+  targetDir: string,
+): Promise<void> {
   const parentDir = dirname(targetDir);
   const targetName = targetDir.split(/[\\/]/).pop() ?? 'skill';
   const uniqueSuffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -38,7 +41,9 @@ export async function replaceDirectoryWithCopy(sourceDir: string, targetDir: str
 
     if (hasBackup) {
       if (!(await pathExists(targetDir))) {
-        await import('fs/promises').then((fs) => fs.rename(backupDir, targetDir)).catch(() => {});
+        await import('fs/promises')
+          .then((fs) => fs.rename(backupDir, targetDir))
+          .catch(() => {});
       } else {
         await rm(backupDir, { recursive: true, force: true }).catch(() => {});
       }
@@ -68,7 +73,10 @@ export async function ensureDir(path: string): Promise<void> {
 const EXCLUDE_FILES = new Set(['metadata.json']);
 const EXCLUDE_DIRS = new Set(['.git', '__pycache__', 'node_modules']);
 
-export async function copyDirectory(sourceDir: string, targetDir: string): Promise<void> {
+export async function copyDirectory(
+  sourceDir: string,
+  targetDir: string,
+): Promise<void> {
   await mkdir(targetDir, { recursive: true });
   const entries = await readdir(sourceDir, { withFileTypes: true });
 
@@ -92,14 +100,16 @@ export async function copyDirectory(sourceDir: string, targetDir: string): Promi
           recursive: true,
           dereference: true,
         });
-      })
+      }),
   );
 }
 
-export async function createDirectorySymlink(targetDir: string, linkPath: string): Promise<boolean> {
+export async function createDirectorySymlink(
+  targetDir: string,
+  linkPath: string,
+): Promise<boolean> {
   try {
     const resolvedTarget = resolve(targetDir);
-    const resolvedLinkPath = resolve(linkPath);
 
     try {
       const existing = await lstat(linkPath);
@@ -118,7 +128,9 @@ export async function createDirectorySymlink(targetDir: string, linkPath: string
     await mkdir(dirname(linkPath), { recursive: true });
     const relativeTarget = relative(dirname(linkPath), resolvedTarget);
     const symlinkType = process.platform === 'win32' ? 'junction' : 'dir';
-    await import('fs/promises').then((fs) => fs.symlink(relativeTarget, linkPath, symlinkType));
+    await import('fs/promises').then((fs) =>
+      fs.symlink(relativeTarget, linkPath, symlinkType),
+    );
     return true;
   } catch {
     return false;

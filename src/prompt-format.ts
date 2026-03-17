@@ -3,7 +3,10 @@ import pc from 'picocolors';
 
 const DEFAULT_HINT_MAX_LENGTH = 56;
 
-function formatPromptText(value: string, maxLength: number): string | undefined {
+function formatPromptText(
+  value: string,
+  maxLength: number,
+): string | undefined {
   const collapsed = value.replace(/\s+/g, ' ').trim();
   if (!collapsed) {
     return undefined;
@@ -20,10 +23,16 @@ function formatPromptText(value: string, maxLength: number): string | undefined 
   return `${collapsed.slice(0, maxLength - 3).trimEnd()}...`;
 }
 
-export function formatPromptHint(value: string, maxLength = DEFAULT_HINT_MAX_LENGTH): string | undefined {
+export function formatPromptHint(
+  value: string,
+  maxLength = DEFAULT_HINT_MAX_LENGTH,
+): string | undefined {
   return formatPromptText(value, maxLength);
 }
 
-export function showPromptHelp(helpText: string, logMessage: (message: string) => void = p.log.message): void {
-  logMessage(pc.dim(helpText));
+export function showPromptHelp(
+  helpText: string,
+  logMessage: (message: string) => void = p.log.message,
+): void {
+  logMessage(`${pc.dim(helpText)}\n`);
 }

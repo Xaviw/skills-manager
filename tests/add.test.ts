@@ -26,7 +26,13 @@ vi.mock('../src/list-prompt.js', () => ({
 
 describe('add command helpers', () => {
   it('parses repeated --skill flags', () => {
-    const result = parseAddOptions(['repo', '--skill', 'skill-one', '--skill', 'skill-two']);
+    const result = parseAddOptions([
+      'repo',
+      '--skill',
+      'skill-one',
+      '--skill',
+      'skill-two',
+    ]);
 
     expect(result).toEqual({
       source: 'repo',
@@ -35,7 +41,12 @@ describe('add command helpers', () => {
   });
 
   it('parses multiple skill names after a single --skill flag', () => {
-    const result = parseAddOptions(['repo', '--skill', 'skill-one', 'skill-two']);
+    const result = parseAddOptions([
+      'repo',
+      '--skill',
+      'skill-one',
+      'skill-two',
+    ]);
 
     expect(result).toEqual({
       source: 'repo',
@@ -54,7 +65,9 @@ describe('add command', () => {
     process.env.USERPROFILE = homeDir;
     process.env.HOME = homeDir;
     vi.mocked(listPrompt.multiselectListPrompt).mockReset();
-    vi.mocked(listPrompt.multiselectListPrompt).mockResolvedValue(['agent-browser']);
+    vi.mocked(listPrompt.multiselectListPrompt).mockResolvedValue([
+      'agent-browser',
+    ]);
   });
 
   afterEach(() => {
@@ -79,7 +92,7 @@ describe('add command', () => {
     await writeFile(
       join(skillDir, 'SKILL.md'),
       `---\nname: agent-browser\ndescription: |\n  ${description.replace(/\n/g, '\n  ')}\n---\n\n# Agent Browser\n`,
-      'utf-8'
+      'utf-8',
     );
 
     await runAdd(sourceRepo);
@@ -93,7 +106,9 @@ describe('add command', () => {
     expect(option?.hint).toContain('Browser automation');
     expect(option?.hint).toContain('...');
     expect(option?.hint).not.toContain('\n');
-    expect(option?.hint?.length).toBeLessThan(description.replace(/\s+/g, ' ').trim().length);
+    expect(option?.hint?.length).toBeLessThan(
+      description.replace(/\s+/g, ' ').trim().length,
+    );
 
     rmSync(sourceRepo, { recursive: true, force: true });
   });

@@ -14,4 +14,41 @@ describe('i18n helpers', () => {
     expect(t('managedSkills', {}, 'en')).toBe('Managed Skills');
     expect(t('promptSelectedCount', { count: 3 }, 'en')).toBe('Selected: 3');
   });
+
+  it('prefers locale-related environment variables when no explicit locale is passed', () => {
+    const originalLang = process.env.LANG;
+    const originalLcAll = process.env.LC_ALL;
+    const originalLcMessages = process.env.LC_MESSAGES;
+
+    try {
+      process.env.LANG = 'zh-CN';
+      delete process.env.LC_ALL;
+      delete process.env.LC_MESSAGES;
+      expect(resolveCliLocale()).toBe('zh');
+
+      process.env.LC_MESSAGES = 'en-US';
+      expect(resolveCliLocale()).toBe('en');
+
+      process.env.LC_ALL = 'zh-TW';
+      expect(resolveCliLocale()).toBe('zh');
+    } finally {
+      if (originalLang === undefined) {
+        delete process.env.LANG;
+      } else {
+        process.env.LANG = originalLang;
+      }
+
+      if (originalLcAll === undefined) {
+        delete process.env.LC_ALL;
+      } else {
+        process.env.LC_ALL = originalLcAll;
+      }
+
+      if (originalLcMessages === undefined) {
+        delete process.env.LC_MESSAGES;
+      } else {
+        process.env.LC_MESSAGES = originalLcMessages;
+      }
+    }
+  });
 });

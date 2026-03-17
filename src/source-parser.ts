@@ -32,7 +32,7 @@ export function getOwnerRepo(parsed: ParsedSource): string | null {
 
   const normalizedUrl = parsed.url.replace(/\/$/, '');
   const match = normalizedUrl.match(
-    /(?:git@|https?:\/\/|ssh:\/\/git@)?github\.com[:/]([^/]+)\/([^/]+?)(?:\.git)?$/
+    /(?:git@|https?:\/\/|ssh:\/\/git@)?github\.com[:/]([^/]+)\/([^/]+?)(?:\.git)?$/,
   );
   if (!match) {
     return null;
@@ -54,7 +54,7 @@ export function parseSource(input: string): ParsedSource {
   }
 
   const githubTreeWithPathMatch = normalizedInput.match(
-    /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/tree\/([^/]+)\/(.+)$/
+    /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/tree\/([^/]+)\/(.+)$/,
   );
   if (githubTreeWithPathMatch) {
     const [, owner, repo, ref, subpath] = githubTreeWithPathMatch;
@@ -66,7 +66,9 @@ export function parseSource(input: string): ParsedSource {
     };
   }
 
-  const githubTreeMatch = normalizedInput.match(/^https:\/\/github\.com\/([^/]+)\/([^/]+)\/tree\/([^/]+)$/);
+  const githubTreeMatch = normalizedInput.match(
+    /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/tree\/([^/]+)$/,
+  );
   if (githubTreeMatch) {
     const [, owner, repo, ref] = githubTreeMatch;
     return {
@@ -76,7 +78,9 @@ export function parseSource(input: string): ParsedSource {
     };
   }
 
-  const githubRepoMatch = normalizedInput.match(/^https:\/\/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?\/?$/);
+  const githubRepoMatch = normalizedInput.match(
+    /^https:\/\/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?\/?$/,
+  );
   if (githubRepoMatch) {
     const [, owner, repo] = githubRepoMatch;
     return {
@@ -86,7 +90,11 @@ export function parseSource(input: string): ParsedSource {
   }
 
   const shorthandMatch = normalizedInput.match(/^([^/]+)\/([^/]+)(?:\/(.+))?$/);
-  if (shorthandMatch && !normalizedInput.includes(':') && !normalizedInput.startsWith('.')) {
+  if (
+    shorthandMatch &&
+    !normalizedInput.includes(':') &&
+    !normalizedInput.startsWith('.')
+  ) {
     const [, owner, repo, subpath] = shorthandMatch;
     return {
       type: 'github',

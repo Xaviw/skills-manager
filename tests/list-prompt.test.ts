@@ -17,12 +17,20 @@ describe('list prompt helpers', () => {
   });
 
   it('truncates text to the requested visible width', () => {
-    expect(truncateDisplayText('abcdefghijklmnopqrstuvwxyz', 10)).toBe('abcdefg...');
+    expect(truncateDisplayText('abcdefghijklmnopqrstuvwxyz', 10)).toBe(
+      'abcdefg...',
+    );
     expect(truncateDisplayText('选择要安装的技能', 8)).toBe('选择...');
   });
 
   it('keeps the label and truncates the hint separately when space is limited', () => {
-    expect(fitOptionText('agent-browser', 'Browser automation for websites and forms', 32)).toEqual({
+    expect(
+      fitOptionText(
+        'agent-browser',
+        'Browser automation for websites and forms',
+        32,
+      ),
+    ).toEqual({
       label: 'agent-browser',
       hint: 'Browser autom...',
     });
@@ -32,13 +40,19 @@ describe('list prompt helpers', () => {
   });
 
   it('localizes overflow summaries', () => {
-    expect(formatOverflowSummary(2, 5, 'en')).toBe('↑ 2 more above · ↓ 5 more below');
-    expect(formatOverflowSummary(1, 3, 'zh')).toBe('↑ 上方还有 1 项 · ↓ 下方还有 3 项');
+    expect(formatOverflowSummary(2, 5, 'en')).toBe(
+      '↑ 2 more above · ↓ 5 more below',
+    );
+    expect(formatOverflowSummary(1, 3, 'zh')).toBe(
+      '↑ 上方还有 1 项 · ↓ 下方还有 3 项',
+    );
   });
 
   it('summarizes selected labels with localized overflow text', () => {
     expect(summarizeSelectedLabels([], 'zh')).toBe('（无）');
-    expect(summarizeSelectedLabels(['a', 'b', 'c', 'd'], 'en')).toBe('a, b, c +1 more');
+    expect(summarizeSelectedLabels(['a', 'b', 'c', 'd'], 'en')).toBe(
+      'a, b, c +1 more',
+    );
   });
 
   it('detects the custom cancel symbol', () => {

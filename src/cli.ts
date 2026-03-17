@@ -49,10 +49,12 @@ async function main(): Promise<void> {
     case 'update':
       await runUpdate({ skillNames: rest });
       return;
+    case 'help':
     case '--help':
     case '-h':
       showHelp();
       return;
+    case 'version':
     case '--version':
     case '-v':
       console.log(getVersion());

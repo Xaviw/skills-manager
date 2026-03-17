@@ -21,7 +21,9 @@ interface ResolvedInstall {
   directoryName: string;
 }
 
-async function promptForDirectoryName(defaultName: string): Promise<string | symbol> {
+async function promptForDirectoryName(
+  defaultName: string,
+): Promise<string | symbol> {
   return p.text({
     message: t('directoryExistsPrompt', { defaultName }),
     defaultValue: `${defaultName}-copy`,
@@ -36,12 +38,17 @@ async function promptForDirectoryName(defaultName: string): Promise<string | sym
 export async function resolveDirectoryName(
   skill: Skill,
   options: AddOptions,
-  promptImpl: (defaultName: string) => Promise<string | symbol> = promptForDirectoryName,
-  reservedDirectoryNames: Set<string> = new Set()
+  promptImpl: (
+    defaultName: string,
+  ) => Promise<string | symbol> = promptForDirectoryName,
+  reservedDirectoryNames: Set<string> = new Set(),
 ): Promise<string> {
   const defaultName = sanitizeName(skill.name);
   const hasConflict = async (directoryName: string): Promise<boolean> => {
-    return reservedDirectoryNames.has(directoryName) || (await hasBaseSkillDirectory(directoryName));
+    return (
+      reservedDirectoryNames.has(directoryName) ||
+      (await hasBaseSkillDirectory(directoryName))
+    );
   };
 
   if (!(await hasConflict(defaultName))) {
@@ -50,7 +57,9 @@ export async function resolveDirectoryName(
   }
 
   if (options.skill?.length) {
-    throw new Error(t('skillDirectoryConflict', { directoryName: defaultName }));
+    throw new Error(
+      t('skillDirectoryConflict', { directoryName: defaultName }),
+    );
   }
 
   const renamed = await promptImpl(defaultName);
@@ -67,7 +76,10 @@ export async function resolveDirectoryName(
   return nextName;
 }
 
-export function parseAddOptions(args: string[]): { source?: string; options: AddOptions } {
+export function parseAddOptions(args: string[]): {
+  source?: string;
+  options: AddOptions;
+} {
   const options: AddOptions = {};
   let source: string | undefined;
 
@@ -77,7 +89,11 @@ export function parseAddOptions(args: string[]): { source?: string; options: Add
     if (arg === '-s' || arg === '--skill') {
       options.skill = options.skill || [];
       index += 1;
-      while (index < args.length && args[index] && !args[index]!.startsWith('-')) {
+      while (
+        index < args.length &&
+        args[index] &&
+        !args[index]!.startsWith('-')
+      ) {
         options.skill.push(args[index]!);
         index += 1;
       }
@@ -93,7 +109,10 @@ export function parseAddOptions(args: string[]): { source?: string; options: Add
   return { source, options };
 }
 
-export async function runAdd(sourceInput: string | undefined, options: AddOptions = {}): Promise<void> {
+export async function runAdd(
+  sourceInput: string | undefined,
+  options: AddOptions = {},
+): Promise<void> {
   if (!sourceInput) {
     p.log.error(t('missingSource'));
     process.exit(1);
@@ -119,7 +138,9 @@ export async function runAdd(sourceInput: string | undefined, options: AddOption
     if (options.skill?.length) {
       selectedSkills = filterSkills(discoveredSkills, options.skill);
       if (selectedSkills.length === 0) {
-        p.log.error(t('noMatchingSkillsFound', { names: options.skill.join(', ') }));
+        p.log.error(
+          t('noMatchingSkillsFound', { names: options.skill.join(', ') }),
+        );
         process.exit(1);
       }
     } else {
@@ -140,7 +161,9 @@ export async function runAdd(sourceInput: string | undefined, options: AddOption
         process.exit(0);
       }
 
-      selectedSkills = discoveredSkills.filter((skill) => (picked as string[]).includes(skill.name));
+      selectedSkills = discoveredSkills.filter((skill) =>
+        (picked as string[]).includes(skill.name),
+      );
     }
 
     const reservedDirectoryNames = new Set<string>();
@@ -148,7 +171,12 @@ export async function runAdd(sourceInput: string | undefined, options: AddOption
     for (const skill of selectedSkills) {
       resolvedInstalls.push({
         skill,
-        directoryName: await resolveDirectoryName(skill, options, promptForDirectoryName, reservedDirectoryNames),
+        directoryName: await resolveDirectoryName(
+          skill,
+          options,
+          promptForDirectoryName,
+          reservedDirectoryNames,
+        ),
       });
     }
 
@@ -157,11 +185,19 @@ export async function runAdd(sourceInput: string | undefined, options: AddOption
     const token = getGitHubToken();
 
     for (const item of resolvedInstalls) {
-      const skillPath = relative(sourceDir, item.skill.path).split('\\').join('/');
-      const skillMdRelativePath = skillPath ? `${skillPath}/SKILL.md` : 'SKILL.md';
+      const skillPath = relative(sourceDir, item.skill.path)
+        .split('\\')
+        .join('/');
+      const skillMdRelativePath = skillPath
+        ? `${skillPath}/SKILL.md`
+        : 'SKILL.md';
 
       const skillFolderHash = trackableSource
-        ? ((await fetchSkillFolderHash(trackableSource, skillMdRelativePath, token)) ?? '')
+        ? ((await fetchSkillFolderHash(
+            trackableSource,
+            skillMdRelativePath,
+            token,
+          )) ?? '')
         : '';
 
       await installSkillToBaseDir(item.skill.path, item.directoryName, {
@@ -174,7 +210,12 @@ export async function runAdd(sourceInput: string | undefined, options: AddOption
       });
     }
 
-    p.log.success(t('installedSkillsIntoBaseDir', { count: resolvedInstalls.length, baseDir: getBaseDir() }));
+    p.log.success(
+      t('installedSkillsIntoBaseDir', {
+        count: resolvedInstalls.length,
+        baseDir: getBaseDir(),
+      }),
+    );
   } catch (error) {
     p.log.error(error instanceof Error ? error.message : t('unknownError'));
     process.exit(1);

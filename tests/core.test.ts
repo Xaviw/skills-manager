@@ -11,12 +11,16 @@ import { readSkillLock } from '../src/skill-lock.js';
 import { parseSource } from '../src/source-parser.js';
 import { runUpdate } from '../src/update.js';
 
-async function createSkill(dir: string, name: string, body = '# skill'): Promise<void> {
+async function createSkill(
+  dir: string,
+  name: string,
+  body = '# skill',
+): Promise<void> {
   await mkdir(dir, { recursive: true });
   await writeFile(
     join(dir, 'SKILL.md'),
     `---\nname: ${name}\ndescription: ${name} description\n---\n\n${body}\n`,
-    'utf-8'
+    'utf-8',
   );
 }
 
@@ -54,17 +58,33 @@ describe('core modules', () => {
   it('extracts owner and repo from GitHub git URLs', async () => {
     const { getOwnerRepo } = await import('../src/source-parser.js');
 
-    expect(getOwnerRepo(parseSource('git@github.com:openai/agent-skills.git'))).toBe('openai/agent-skills');
-    expect(getOwnerRepo(parseSource('ssh://git@github.com/openai/agent-skills.git'))).toBe('openai/agent-skills');
-    expect(getOwnerRepo(parseSource('https://github.com/openai/agent-skills.git'))).toBe('openai/agent-skills');
-    expect(getOwnerRepo(parseSource('https://example.com/openai/agent-skills.git'))).toBeNull();
+    expect(
+      getOwnerRepo(parseSource('git@github.com:openai/agent-skills.git')),
+    ).toBe('openai/agent-skills');
+    expect(
+      getOwnerRepo(parseSource('ssh://git@github.com/openai/agent-skills.git')),
+    ).toBe('openai/agent-skills');
+    expect(
+      getOwnerRepo(parseSource('https://github.com/openai/agent-skills.git')),
+    ).toBe('openai/agent-skills');
+    expect(
+      getOwnerRepo(parseSource('https://example.com/openai/agent-skills.git')),
+    ).toBeNull();
   });
 
   it('resolves a renamed directory when interactive conflict handling is needed', async () => {
-    const skill = { name: 'skill-one', description: 'desc', path: 'C:/tmp/skill-one' };
+    const skill = {
+      name: 'skill-one',
+      description: 'desc',
+      path: 'C:/tmp/skill-one',
+    };
     await mkdir(join(getBaseDir(), 'skill-one'), { recursive: true });
 
-    const resolved = await resolveDirectoryName(skill, {}, async () => 'skill-one-copy');
+    const resolved = await resolveDirectoryName(
+      skill,
+      {},
+      async () => 'skill-one-copy',
+    );
     expect(resolved).toBe('skill-one-copy');
   });
 
@@ -76,8 +96,8 @@ describe('core modules', () => {
         { name: 'Foo!', description: 'desc', path: 'C:/tmp/foo-one' },
         { skill: ['Foo!', 'Foo?'] },
         async () => 'ignored',
-        reservedDirectoryNames
-      )
+        reservedDirectoryNames,
+      ),
     ).resolves.toBe('foo');
 
     await expect(
@@ -85,9 +105,11 @@ describe('core modules', () => {
         { name: 'Foo?', description: 'desc', path: 'C:/tmp/foo-two' },
         { skill: ['Foo!', 'Foo?'] },
         async () => 'ignored',
-        reservedDirectoryNames
-      )
-    ).rejects.toThrow(t('skillDirectoryConflict', { directoryName: 'foo' }, locale));
+        reservedDirectoryNames,
+      ),
+    ).rejects.toThrow(
+      t('skillDirectoryConflict', { directoryName: 'foo' }, locale),
+    );
   });
 
   it('updates a managed skill and refreshes the stored hash', async () => {
@@ -121,12 +143,19 @@ describe('core modules', () => {
 
     const promptMultiselect = vi.fn().mockResolvedValue(['skill-one']);
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-    await runUpdate({ isInteractive: true, promptMultiselect: promptMultiselect as never, logPromptHelp: () => {} });
+    await runUpdate({
+      isInteractive: true,
+      promptMultiselect: promptMultiselect as never,
+      logPromptHelp: () => {},
+    });
 
     const lock = await readSkillLock();
     expect(lock.skills['skill-one']?.skillFolderHash).toBe('new-hash');
 
-    const skillContent = await readFile(join(getBaseDir(), 'skill-one', 'SKILL.md'), 'utf-8');
+    const skillContent = await readFile(
+      join(getBaseDir(), 'skill-one', 'SKILL.md'),
+      'utf-8',
+    );
     expect(skillContent).toContain('# version 2');
     expect(promptMultiselect).toHaveBeenCalledTimes(1);
     const [promptCall] = promptMultiselect.mock.calls;
@@ -136,7 +165,9 @@ describe('core modules', () => {
     expect(promptOption?.hint).toContain('owner/repo');
     expect(promptOption?.hint).toContain('...');
     expect(promptOption?.hint).not.toContain('\n');
-    expect(logSpy).toHaveBeenCalledWith(t('updatedSkills', { count: 1 }, locale));
+    expect(logSpy).toHaveBeenCalledWith(
+      t('updatedSkills', { count: 1 }, locale),
+    );
 
     rmSync(sourceRepo, { recursive: true, force: true });
   });
@@ -195,8 +226,14 @@ describe('core modules', () => {
     expect(lock.skills['skill-one']?.skillFolderHash).toBe('old-hash-1');
     expect(lock.skills['skill-two']?.skillFolderHash).toBe('new-hash-2');
 
-    const skillOneContent = await readFile(join(getBaseDir(), 'skill-one', 'SKILL.md'), 'utf-8');
-    const skillTwoContent = await readFile(join(getBaseDir(), 'skill-two', 'SKILL.md'), 'utf-8');
+    const skillOneContent = await readFile(
+      join(getBaseDir(), 'skill-one', 'SKILL.md'),
+      'utf-8',
+    );
+    const skillTwoContent = await readFile(
+      join(getBaseDir(), 'skill-two', 'SKILL.md'),
+      'utf-8',
+    );
     expect(skillOneContent).toContain('# version 1');
     expect(skillTwoContent).toContain('# version 2');
     expect(promptMultiselect).not.toHaveBeenCalled();
@@ -207,11 +244,15 @@ describe('core modules', () => {
 
   it('exits when a requested skill is missing', async () => {
     const exitError = new Error('process.exit');
-    vi.spyOn(process, 'exit').mockImplementation(((code?: string | number | null | undefined) => {
+    vi.spyOn(process, 'exit').mockImplementation(((
+      code?: string | number | null | undefined,
+    ) => {
       throw Object.assign(exitError, { code });
     }) as never);
 
-    await expect(runUpdate({ skillNames: ['missing-skill'] })).rejects.toMatchObject({ code: 1 });
+    await expect(
+      runUpdate({ skillNames: ['missing-skill'] }),
+    ).rejects.toMatchObject({ code: 1 });
   });
 
   it('exits when a requested skill exists but cannot be updated', async () => {
@@ -229,11 +270,15 @@ describe('core modules', () => {
     });
 
     const exitError = new Error('process.exit');
-    vi.spyOn(process, 'exit').mockImplementation(((code?: string | number | null | undefined) => {
+    vi.spyOn(process, 'exit').mockImplementation(((
+      code?: string | number | null | undefined,
+    ) => {
       throw Object.assign(exitError, { code });
     }) as never);
 
-    await expect(runUpdate({ skillNames: ['local-skill'] })).rejects.toMatchObject({ code: 1 });
+    await expect(
+      runUpdate({ skillNames: ['local-skill'] }),
+    ).rejects.toMatchObject({ code: 1 });
 
     rmSync(localSource, { recursive: true, force: true });
   });
@@ -262,12 +307,19 @@ describe('core modules', () => {
     vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
 
     const promptMultiselect = vi.fn().mockResolvedValue(['skill-one']);
-    await runUpdate({ isInteractive: true, promptMultiselect: promptMultiselect as never, logPromptHelp: () => {} });
+    await runUpdate({
+      isInteractive: true,
+      promptMultiselect: promptMultiselect as never,
+      logPromptHelp: () => {},
+    });
 
     const lock = await readSkillLock();
     expect(lock.skills['skill-one']?.skillFolderHash).toBe('new-hash');
 
-    const skillContent = await readFile(join(getBaseDir(), 'skill-one', 'SKILL.md'), 'utf-8');
+    const skillContent = await readFile(
+      join(getBaseDir(), 'skill-one', 'SKILL.md'),
+      'utf-8',
+    );
     expect(skillContent).toContain('# version 2');
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
@@ -311,11 +363,17 @@ describe('core modules', () => {
     });
     vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
 
-    const promptMultiselect = vi.fn().mockResolvedValue(['skill-one', 'skill-two']);
+    const promptMultiselect = vi
+      .fn()
+      .mockResolvedValue(['skill-one', 'skill-two']);
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     const originalExitCode = process.exitCode;
 
-    await runUpdate({ isInteractive: true, promptMultiselect: promptMultiselect as never, logPromptHelp: () => {} });
+    await runUpdate({
+      isInteractive: true,
+      promptMultiselect: promptMultiselect as never,
+      logPromptHelp: () => {},
+    });
 
     const lock = await readSkillLock();
     expect(lock.skills['skill-one']?.skillFolderHash).toBe('new-hash-1');
@@ -325,10 +383,166 @@ describe('core modules', () => {
     const output = logSpy.mock.calls.flat().join('\n');
     expect(output).toContain(t('updatedSkills', { count: 1 }, locale));
     expect(output).toContain(t('failedUpdates', {}, locale));
-    expect(output).toContain(`skill-two: ${t('couldNotLocateSkillInSource', {}, locale)}`);
+    expect(output).toContain(
+      `skill-two: ${t('couldNotLocateSkillInSource', {}, locale)}`,
+    );
 
     process.exitCode = originalExitCode;
     rmSync(sourceRepo, { recursive: true, force: true });
   });
-});
 
+  it('reports spinner progress while checking and updating skills', async () => {
+    const sourceRepo = await mkdtemp(join(tmpdir(), 'skls-mgr-source-'));
+    const sourceSkillDir = join(sourceRepo, 'skills', 'skill-one');
+    await createSkill(sourceSkillDir, 'skill-one', '# version 2');
+
+    await installSkillToBaseDir(sourceSkillDir, 'skill-one', {
+      displayName: 'skill-one',
+      source: 'owner/repo',
+      sourceType: 'github',
+      sourceUrl: sourceRepo,
+      skillPath: 'skills/skill-one/SKILL.md',
+      skillFolderHash: 'old-hash',
+    });
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        sha: 'repo-sha',
+        tree: [{ path: 'skills/skill-one', type: 'tree', sha: 'new-hash' }],
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+
+    const checkSpinner = {
+      start: vi.fn(),
+      message: vi.fn(),
+      stop: vi.fn(),
+    };
+    const updateSpinner = {
+      start: vi.fn(),
+      message: vi.fn(),
+      stop: vi.fn(),
+    };
+    const createSpinner = vi
+      .fn<
+        () => {
+          start: (msg?: string) => void;
+          message: (msg?: string) => void;
+          stop: (msg?: string) => void;
+        }
+      >()
+      .mockImplementationOnce(() => checkSpinner)
+      .mockImplementationOnce(() => updateSpinner);
+
+    await runUpdate({
+      skillNames: ['skill-one'],
+      createSpinner,
+      shouldRenderProgress: true,
+    });
+
+    expect(createSpinner).toHaveBeenCalledTimes(2);
+    expect(checkSpinner.start).toHaveBeenCalledWith(
+      t(
+        'checkingSkillUpdatesProgress',
+        { current: 0, total: 1, skillName: '' },
+        locale,
+      ),
+    );
+    expect(checkSpinner.message).toHaveBeenCalledWith(
+      t(
+        'checkingSkillUpdatesProgress',
+        { current: 1, total: 1, skillName: 'skill-one' },
+        locale,
+      ),
+    );
+    expect(checkSpinner.stop).toHaveBeenCalledWith(
+      t(
+        'checkingSkillUpdatesProgress',
+        { current: 1, total: 1, skillName: '' },
+        locale,
+      ),
+    );
+    expect(updateSpinner.start).toHaveBeenCalledWith(
+      t(
+        'updatingSkillsProgress',
+        { current: 0, total: 1, skillName: '' },
+        locale,
+      ),
+    );
+    expect(updateSpinner.message).toHaveBeenCalledWith(
+      t(
+        'updatingSkillsProgress',
+        { current: 1, total: 1, skillName: 'skill-one' },
+        locale,
+      ),
+    );
+    expect(updateSpinner.stop).toHaveBeenCalledWith(
+      t(
+        'updatingSkillsProgress',
+        { current: 1, total: 1, skillName: '' },
+        locale,
+      ),
+    );
+
+    rmSync(sourceRepo, { recursive: true, force: true });
+  });
+
+  it('limits concurrent update checks to the configured concurrency', async () => {
+    const sourceRepo = await mkdtemp(join(tmpdir(), 'skls-mgr-source-'));
+    const tree = [
+      { path: 'skills/skill-one', type: 'tree', sha: 'hash-one' },
+      { path: 'skills/skill-two', type: 'tree', sha: 'hash-two' },
+      { path: 'skills/skill-three', type: 'tree', sha: 'hash-three' },
+      { path: 'skills/skill-four', type: 'tree', sha: 'hash-four' },
+      { path: 'skills/skill-five', type: 'tree', sha: 'hash-five' },
+    ];
+
+    for (const [index, skillName] of [
+      'skill-one',
+      'skill-two',
+      'skill-three',
+      'skill-four',
+      'skill-five',
+    ].entries()) {
+      const sourceSkillDir = join(sourceRepo, 'skills', skillName);
+      await createSkill(sourceSkillDir, skillName, `# version ${index + 1}`);
+      await installSkillToBaseDir(sourceSkillDir, skillName, {
+        displayName: skillName,
+        source: 'owner/repo',
+        sourceType: 'github',
+        sourceUrl: sourceRepo,
+        skillPath: `skills/${skillName}/SKILL.md`,
+        skillFolderHash: tree[index]!.sha,
+      });
+    }
+
+    let activeRequests = 0;
+    let maxConcurrentRequests = 0;
+    const fetchMock = vi.fn(async () => {
+      activeRequests += 1;
+      maxConcurrentRequests = Math.max(maxConcurrentRequests, activeRequests);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      activeRequests -= 1;
+      return {
+        ok: true,
+        json: async () => ({
+          sha: 'repo-sha',
+          tree,
+        }),
+      };
+    });
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    await runUpdate({
+      checkConcurrency: 2,
+      shouldRenderProgress: false,
+    });
+
+    expect(maxConcurrentRequests).toBe(2);
+    expect(logSpy).toHaveBeenCalledWith(t('allSkillsUpToDate', {}, locale));
+
+    rmSync(sourceRepo, { recursive: true, force: true });
+  });
+});

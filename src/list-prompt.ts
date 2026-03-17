@@ -127,7 +127,9 @@ export function truncateDisplayText(value: string, maxWidth: number): string {
   return `${result.trimEnd()}${ellipsis}`;
 }
 
-export function isListPromptCancel(value: unknown): value is typeof listPromptCancelSymbol {
+export function isListPromptCancel(
+  value: unknown,
+): value is typeof listPromptCancelSymbol {
   return value === listPromptCancelSymbol;
 }
 
@@ -147,7 +149,7 @@ function buildLine(
   prefix: string,
   content: string,
   maxWidth: number,
-  style: (value: string) => string = (value) => value
+  style: (value: string) => string = (value) => value,
 ): string {
   const availableWidth = Math.max(0, maxWidth - measureDisplayWidth(prefix));
   return `${prefix}${style(truncateDisplayText(content, availableWidth))}`;
@@ -156,7 +158,7 @@ function buildLine(
 export function fitOptionText(
   label: string,
   hint: string | undefined,
-  maxWidth: number
+  maxWidth: number,
 ): { label: string; hint?: string } {
   const normalizedLabel = normalizeDisplayText(label);
   const normalizedHint = hint ? normalizeDisplayText(hint) : undefined;
@@ -171,7 +173,8 @@ export function fitOptionText(
 
   const labelWidth = measureDisplayWidth(normalizedLabel);
   const hintWrapperWidth = measureDisplayWidth(' ()');
-  const availableHintWidth = maxWidth - Math.min(labelWidth, maxWidth) - hintWrapperWidth;
+  const availableHintWidth =
+    maxWidth - Math.min(labelWidth, maxWidth) - hintWrapperWidth;
 
   if (labelWidth >= maxWidth || availableHintWidth < 5) {
     return { label: truncateDisplayText(normalizedLabel, maxWidth) };
@@ -191,7 +194,7 @@ export function fitOptionText(
 export function formatOverflowSummary(
   hiddenBefore: number,
   hiddenAfter: number,
-  locale?: 'en' | 'zh'
+  locale?: 'en' | 'zh',
 ): string {
   const parts: string[] = [];
   if (hiddenBefore > 0) {
@@ -203,7 +206,10 @@ export function formatOverflowSummary(
   return parts.join(' · ');
 }
 
-export function summarizeSelectedLabels(labels: string[], locale?: 'en' | 'zh'): string {
+export function summarizeSelectedLabels(
+  labels: string[],
+  locale?: 'en' | 'zh',
+): string {
   if (labels.length === 0) {
     return t('none', {}, locale);
   }
@@ -221,10 +227,13 @@ function buildOptionLine(
   label: string,
   hint: string | undefined,
   maxWidth: number,
-  highlightLabel = false
+  highlightLabel = false,
 ): string {
   const markerWidth = measureDisplayWidth(marker);
-  const availableWidth = Math.max(0, maxWidth - measureDisplayWidth(prefix) - markerWidth);
+  const availableWidth = Math.max(
+    0,
+    maxWidth - measureDisplayWidth(prefix) - markerWidth,
+  );
   const fitted = fitOptionText(label, hint, availableWidth);
   const renderedLabel = highlightLabel ? pc.bold(fitted.label) : fitted.label;
   const renderedHint = fitted.hint ? pc.dim(` (${fitted.hint})`) : '';
@@ -235,17 +244,15 @@ function getSafeTerminalWidth(): number {
   return Math.max((process.stdout.columns ?? 80) - 4, 20);
 }
 
-async function runListPrompt<Value>(
-  options: {
-    message: string;
-    options: Array<ListPromptOption<Value>>;
-    maxVisible: number;
-    selected: Set<Value>;
-    cursor: number;
-    required: boolean;
-    mode: 'single' | 'multiple';
-  }
-): Promise<Value | Value[] | symbol> {
+async function runListPrompt<Value>(options: {
+  message: string;
+  options: Array<ListPromptOption<Value>>;
+  maxVisible: number;
+  selected: Set<Value>;
+  cursor: number;
+  required: boolean;
+  mode: 'single' | 'multiple';
+}): Promise<Value | Value[] | symbol> {
   return new Promise((resolve) => {
     const rl = readline.createInterface({
       input: process.stdin,
@@ -275,20 +282,36 @@ async function runListPrompt<Value>(
 
       const width = getSafeTerminalWidth();
       const lines: string[] = [];
-      const headerPrefix = state === 'active' ? `${S_STEP_ACTIVE} ` : state === 'submit' ? `${S_STEP_SUBMIT} ` : `${S_STEP_CANCEL} `;
+      const headerPrefix =
+        state === 'active'
+          ? `${S_STEP_ACTIVE} `
+          : state === 'submit'
+            ? `${S_STEP_SUBMIT} `
+            : `${S_STEP_CANCEL} `;
       lines.push(buildLine(headerPrefix, options.message, width, pc.bold));
       lines.push(S_BAR);
 
       if (state === 'active') {
         if (options.options.length === 0) {
-          lines.push(buildLine(`${S_BAR}  `, t('promptNoOptions'), width, pc.dim));
+          lines.push(
+            buildLine(`${S_BAR}  `, t('promptNoOptions'), width, pc.dim),
+          );
         } else {
-          const maxVisible = Math.min(options.maxVisible, options.options.length);
+          const maxVisible = Math.min(
+            options.maxVisible,
+            options.options.length,
+          );
           const visibleStart = Math.max(
             0,
-            Math.min(cursor - Math.floor(maxVisible / 2), options.options.length - maxVisible)
+            Math.min(
+              cursor - Math.floor(maxVisible / 2),
+              options.options.length - maxVisible,
+            ),
           );
-          const visibleEnd = Math.min(options.options.length, visibleStart + maxVisible);
+          const visibleEnd = Math.min(
+            options.options.length,
+            visibleStart + maxVisible,
+          );
 
           for (let index = visibleStart; index < visibleEnd; index += 1) {
             const option = options.options[index]!;
@@ -297,34 +320,73 @@ async function runListPrompt<Value>(
             const prefix = isCursor ? `${S_BAR} ${S_POINTER} ` : `${S_BAR}   `;
             const marker = isSelected ? `${S_SELECTED} ` : `${S_UNSELECTED} `;
 
-            lines.push(buildOptionLine(prefix, marker, option.label, option.hint, width, isCursor));
+            lines.push(
+              buildOptionLine(
+                prefix,
+                marker,
+                option.label,
+                option.hint,
+                width,
+                isCursor,
+              ),
+            );
           }
 
           const hiddenBefore = visibleStart;
           const hiddenAfter = options.options.length - visibleEnd;
           if (hiddenBefore > 0 || hiddenAfter > 0) {
-            lines.push(buildLine(`${S_BAR}  `, formatOverflowSummary(hiddenBefore, hiddenAfter), width, pc.dim));
+            lines.push(
+              buildLine(
+                `${S_BAR}  `,
+                formatOverflowSummary(hiddenBefore, hiddenAfter),
+                width,
+                pc.dim,
+              ),
+            );
           }
         }
 
         if (options.mode === 'multiple') {
           lines.push(S_BAR);
           lines.push(
-            buildLine(`${S_BAR}  `, t('promptSelectedCount', { count: options.selected.size }), width, pc.green)
+            buildLine(
+              `${S_BAR}  `,
+              t('promptSelectedCount', { count: options.selected.size }),
+              width,
+              pc.green,
+            ),
           );
         }
       } else if (state === 'submit') {
         if (options.mode === 'single') {
-          const selectedOption = options.options.find((option) => options.selected.has(option.value));
-          lines.push(buildLine(`${S_BAR}  `, selectedOption?.label ?? t('none'), width, pc.dim));
+          const selectedOption = options.options.find((option) =>
+            options.selected.has(option.value),
+          );
+          lines.push(
+            buildLine(
+              `${S_BAR}  `,
+              selectedOption?.label ?? t('none'),
+              width,
+              pc.dim,
+            ),
+          );
         } else {
           const selectedLabels = options.options
             .filter((option) => options.selected.has(option.value))
             .map((option) => option.label);
-          lines.push(buildLine(`${S_BAR}  `, summarizeSelectedLabels(selectedLabels), width, pc.dim));
+          lines.push(
+            buildLine(
+              `${S_BAR}  `,
+              summarizeSelectedLabels(selectedLabels),
+              width,
+              pc.dim,
+            ),
+          );
         }
       } else {
-        lines.push(buildLine(`${S_BAR}  `, t('promptCancelled'), width, pc.dim));
+        lines.push(
+          buildLine(`${S_BAR}  `, t('promptCancelled'), width, pc.dim),
+        );
       }
 
       lines.push(S_FOOT);
@@ -333,7 +395,11 @@ async function runListPrompt<Value>(
     };
 
     const submit = (): void => {
-      if (options.mode === 'multiple' && options.required && options.selected.size === 0) {
+      if (
+        options.mode === 'multiple' &&
+        options.required &&
+        options.selected.size === 0
+      ) {
         return;
       }
 
@@ -341,12 +407,18 @@ async function runListPrompt<Value>(
       cleanup();
 
       if (options.mode === 'single') {
-        const selectedOption = options.options.find((option) => options.selected.has(option.value));
+        const selectedOption = options.options.find((option) =>
+          options.selected.has(option.value),
+        );
         resolve(selectedOption?.value ?? listPromptCancelSymbol);
         return;
       }
 
-      resolve(options.options.filter((option) => options.selected.has(option.value)).map((option) => option.value));
+      resolve(
+        options.options
+          .filter((option) => options.selected.has(option.value))
+          .map((option) => option.value),
+      );
     };
 
     const cancel = (): void => {
@@ -419,7 +491,10 @@ async function runListPrompt<Value>(
         return;
       }
 
-      if (options.mode === 'single' && (key.name === 'space' || key.name === 'right')) {
+      if (
+        options.mode === 'single' &&
+        (key.name === 'space' || key.name === 'right')
+      ) {
         const option = options.options[cursor];
         if (!option) {
           return;
@@ -439,11 +514,13 @@ async function runListPrompt<Value>(
 }
 
 export async function selectListPrompt<Value>(
-  options: SelectListPromptOptions<Value>
+  options: SelectListPromptOptions<Value>,
 ): Promise<Value | symbol> {
   const initialIndex = Math.max(
     0,
-    options.options.findIndex((option) => option.value === options.initialValue)
+    options.options.findIndex(
+      (option) => option.value === options.initialValue,
+    ),
   );
   const selected = new Set<Value>();
   const initialOption = options.options[initialIndex];
@@ -463,7 +540,7 @@ export async function selectListPrompt<Value>(
 }
 
 export async function multiselectListPrompt<Value>(
-  options: MultiselectListPromptOptions<Value>
+  options: MultiselectListPromptOptions<Value>,
 ): Promise<Value[] | symbol> {
   return (await runListPrompt({
     message: options.message,

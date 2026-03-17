@@ -17,24 +17,33 @@
 pnpm dev -- list
 pnpm dev -- add <source>
 pnpm dev -- install
-pnpm build
-pnpm type-check
+pnpm lint
+pnpm format:check
+pnpm check
+pnpm check:all
 pnpm test
+pnpm build
+pnpm prepublishOnly
 ```
 
 补充说明：
 
 - 本地开发入口：`node --import tsx src/cli.ts <command> [args]`
-- 发布前校验基线：`pnpm type-check && pnpm test`
+- `pnpm check`：基于 `lint-staged` 仅检查已暂存文件，供 `pre-commit` hook 使用
+- `pnpm check:all`：执行整仓库 `lint + format:check + type-check`
+- 发布前校验基线：`pnpm prepublishOnly`，等价于 `pnpm check:all && pnpm test`
 
 ## 目录结构
 
 ```text
-bin/         CLI 启动脚本
-src/         核心源码
-tests/       Vitest 测试
-README.md    英文说明
-README-CN.md 中文说明
+bin/              CLI 启动脚本
+src/              核心源码
+tests/            Vitest 测试
+dist/             构建输出
+eslint.config.mjs ESLint v9 flat config
+.prettierrc.json  Prettier 配置
+README.md         英文说明
+README-CN.md      中文说明
 ```
 
 `src/` 中的主要文件：
@@ -54,6 +63,10 @@ README-CN.md 中文说明
   - 单引号
   - 语句末尾分号
   - 多行对象、数组、参数列表保留尾随逗号
+- 代码风格由 ESLint v9 flat config + `neostandard` + Prettier 共同约束：
+  - ESLint 负责代码质量与基础规范
+  - Prettier 负责格式统一
+  - ignore 规则默认与 `.gitignore` 对齐
 - 注释保持克制，仅在逻辑不直观时补充简短说明。
 - 除非用户明确要求，不要把 `dist/` 作为主要修改目标；源码以 `src/` 为准。
 
@@ -63,11 +76,23 @@ README-CN.md 中文说明
 - 若改动影响命令行为、类型或公共流程，优先运行：
 
 ```bash
-pnpm type-check
+pnpm check:all
 pnpm test
 ```
 
+- 若只修改提交中的局部文件并需要验证 hook 行为，可运行：
+
+```bash
+pnpm check
+```
+
 - 如果因为环境限制、依赖缺失或用户要求而未执行验证，需要在最终说明中明确指出。
+
+## 提交与 Hook
+
+- 仓库已接入 `simple-git-hooks`。
+- 当前 `pre-commit` hook 执行 `pnpm check`。
+- `pnpm check` 使用 `lint-staged` 仅校验已暂存文件，不应把整仓库检查误写进提交钩子。
 
 ## 协作约束
 
@@ -75,7 +100,7 @@ pnpm test
 - 不要回退或覆盖用户已有的未授权变更。
 - 优先做最小必要修改，避免无关重排。
 - 发现工作区脏状态时，默认与现有修改共存，除非用户明确要求清理。
-- 新增文档或命令示例时，优先与 `README.md` 和 `README-CN.md` 保持一致。
+- 新增文档或命令示例时，优先与 `README.md` 和 `README-CN.md` 保持一致；若用户明确要求不修改 README，则遵循用户要求。
 
 ## 文档与输出
 

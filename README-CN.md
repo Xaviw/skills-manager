@@ -8,7 +8,21 @@
 
 本项目受 [`vercel-labs/skills`](https://github.com/vercel-labs/skills) 启发，感谢 Vercel Labs 团队对 Agent 生态的贡献。
 
-`vercel-labs/skills` 只支持将 Skills 安装到项目或安装到全局，技能文件容易散落多处；需要安装技能到不同的项目中时，需要频繁查看安装命令。
+`vercel-labs/skills` 使用情景：
+
+- 全局安装：技能安装到 `~/.agents/skills`，软链到其他工具全局技能目录，例如 `~/.claude/skills`。
+- 项目安装：技能安装到 `./.agents/skills`，软链到其他工具项目技能目录，例如 `./.claude/skills`。
+- 安装本地技能：复制本地技能到全局或项目中的 `.agents/skills` 中，软链到其他工具的全局或项目技能目录。
+- 以项目级别重复安装同一个技能时，需要重复使用 `add` 命令，重复创建技能文件。
+
+`skls-mgr` 使用情景：
+
+- 技能统一安装到 `~/.config/skls-mgr`。
+- 按需软链到全局或项目的任意工具技能目录下，例如 `~/.claude/skills`。
+- 本地技能直接放在 `~/.config/skls-mgr` 目录下即可统一管理。
+- 以项目级别重复安装同一个技能时，使用 `install` 命令从收集的技能中按需软链，无需重复 `add` 命令，无需重复创建技能文件。
+
+`skls-mgr` 简化了对技能的管理流程，统一维护，按需软链。
 
 ## 快速开始
 
@@ -112,11 +126,13 @@ npx skls-mgr install --dir ./.agents/skills --link
 
 ## 其他命令
 
-| 命令                         | 说明                                                           |
-| ---------------------------- | -------------------------------------------------------------- |
+| 命令                             | 说明                                                               |
+| -------------------------------- | ------------------------------------------------------------------ |
 | `npx skls-mgr list`              | 列出 `~/.config/skls-mgr` 中的全部技能，支持区分托管技能与手动技能 |
-| `npx skls-mgr update [names...]` | 不带参数时进入交互模式，带参数时更新一个或多个技能             |
-| `npx skls-mgr remove [names...]` | 不带参数时进入交互模式，带参数时删除一个或多个技能             |
+| `npx skls-mgr update [names...]` | 交互式或根据指定名称更新技能                                       |
+| `npx skls-mgr remove [names...]` | 交互式或根据指定名称删除技能                                       |
+| `npx skls-mgr help`              | 显示帮助                                                           |
+| `npx skls-mgr version`           | 显示版本                                                           |
 
 ### 示例
 
@@ -135,6 +151,12 @@ npx skls-mgr remove
 
 # 按名称删除技能
 npx skls-mgr remove skill1 skill2
+
+# 显示帮助
+npx skls-mgr help
+
+# 显示版本
+npx skls-mgr version
 ```
 
 > `skls-mgr update` 依赖 GitHub API。为避免匿名请求带来的限流限制（每小时 60 次），建议在环境变量中配置 `GITHUB_TOKEN` 或 `GH_TOKEN` 以提升配额（每小时 5000 次）。

@@ -23,7 +23,8 @@ export async function runList(): Promise<void> {
   } else {
     for (const skill of managed) {
       const display =
-        skill.lockEntry?.displayName && skill.lockEntry.displayName !== skill.directoryName
+        skill.lockEntry?.displayName &&
+        skill.lockEntry.displayName !== skill.directoryName
           ? ` (${skill.lockEntry.displayName})`
           : '';
       console.log(`  - ${skill.directoryName}${display}`);

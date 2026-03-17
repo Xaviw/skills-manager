@@ -32,7 +32,9 @@ describe('remove command', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.spyOn(process, 'exit').mockImplementation(((code?: string | number | null | undefined) => {
+    vi.spyOn(process, 'exit').mockImplementation(((
+      code?: string | number | null | undefined,
+    ) => {
       throw Object.assign(exitError, { code });
     }) as never);
   });
@@ -51,7 +53,9 @@ describe('remove command', () => {
     expect(listPrompt.multiselectListPrompt).not.toHaveBeenCalled();
     expect(baseDir.removeBaseSkill).toHaveBeenCalledTimes(1);
     expect(baseDir.removeBaseSkill).toHaveBeenCalledWith('skill-one');
-    expect(prompts.log.success).toHaveBeenCalledWith(t('removedSkill', { skillName: 'skill-one' }));
+    expect(prompts.log.success).toHaveBeenCalledWith(
+      t('removedSkill', { skillName: 'skill-one' }),
+    );
   });
 
   it('removes multiple named skills without prompting', async () => {
@@ -66,7 +70,9 @@ describe('remove command', () => {
     expect(baseDir.removeBaseSkill).toHaveBeenCalledTimes(2);
     expect(baseDir.removeBaseSkill).toHaveBeenNthCalledWith(1, 'skill-one');
     expect(baseDir.removeBaseSkill).toHaveBeenNthCalledWith(2, 'skill-two');
-    expect(prompts.log.success).toHaveBeenCalledWith(t('removedSkills', { count: 2 }));
+    expect(prompts.log.success).toHaveBeenCalledWith(
+      t('removedSkills', { count: 2 }),
+    );
   });
 
   it('opens a multiselect with no default selection when no name is provided', async () => {
@@ -74,11 +80,16 @@ describe('remove command', () => {
       { directoryName: 'skill-one', managed: true, path: '/base/skill-one' },
       { directoryName: 'skill-two', managed: false, path: '/base/skill-two' },
     ] as never);
-    vi.mocked(listPrompt.multiselectListPrompt).mockResolvedValue(['skill-one', 'skill-two']);
+    vi.mocked(listPrompt.multiselectListPrompt).mockResolvedValue([
+      'skill-one',
+      'skill-two',
+    ]);
 
     await runRemove();
 
-    expect(prompts.log.message).toHaveBeenCalledWith(pc.dim(t('multiselectPromptHelp')));
+    expect(prompts.log.message).toHaveBeenCalledWith(
+      `${pc.dim(t('multiselectPromptHelp'))}\n`,
+    );
     expect(listPrompt.multiselectListPrompt).toHaveBeenCalledWith({
       message: t('selectSkillsToRemove'),
       options: [
@@ -90,14 +101,18 @@ describe('remove command', () => {
     expect(baseDir.removeBaseSkill).toHaveBeenCalledTimes(2);
     expect(baseDir.removeBaseSkill).toHaveBeenNthCalledWith(1, 'skill-one');
     expect(baseDir.removeBaseSkill).toHaveBeenNthCalledWith(2, 'skill-two');
-    expect(prompts.log.success).toHaveBeenCalledWith(t('removedSkills', { count: 2 }));
+    expect(prompts.log.success).toHaveBeenCalledWith(
+      t('removedSkills', { count: 2 }),
+    );
   });
 
   it('stops when the interactive removal is cancelled', async () => {
     vi.mocked(baseDir.listBaseSkills).mockResolvedValue([
       { directoryName: 'skill-one', managed: true, path: '/base/skill-one' },
     ] as never);
-    vi.mocked(listPrompt.multiselectListPrompt).mockResolvedValue(listPrompt.listPromptCancelSymbol as never);
+    vi.mocked(listPrompt.multiselectListPrompt).mockResolvedValue(
+      listPrompt.listPromptCancelSymbol as never,
+    );
     vi.mocked(listPrompt.isListPromptCancel).mockReturnValue(true);
 
     await runRemove();
@@ -111,8 +126,12 @@ describe('remove command', () => {
       { directoryName: 'skill-one', managed: true, path: '/base/skill-one' },
     ] as never);
 
-    await expect(runRemove(['missing-skill'])).rejects.toMatchObject({ code: 1 });
-    expect(prompts.log.error).toHaveBeenCalledWith(t('skillNotFound', { skillName: 'missing-skill' }));
+    await expect(runRemove(['missing-skill'])).rejects.toMatchObject({
+      code: 1,
+    });
+    expect(prompts.log.error).toHaveBeenCalledWith(
+      t('skillNotFound', { skillName: 'missing-skill' }),
+    );
   });
 
   it('exits with an error and removes nothing when any named skill does not exist', async () => {
@@ -120,15 +139,21 @@ describe('remove command', () => {
       { directoryName: 'skill-one', managed: true, path: '/base/skill-one' },
     ] as never);
 
-    await expect(runRemove(['skill-one', 'missing-skill'])).rejects.toMatchObject({ code: 1 });
+    await expect(
+      runRemove(['skill-one', 'missing-skill']),
+    ).rejects.toMatchObject({ code: 1 });
     expect(baseDir.removeBaseSkill).not.toHaveBeenCalled();
-    expect(prompts.log.error).toHaveBeenCalledWith(t('skillNotFound', { skillName: 'missing-skill' }));
+    expect(prompts.log.error).toHaveBeenCalledWith(
+      t('skillNotFound', { skillName: 'missing-skill' }),
+    );
   });
 
   it('exits with an error when there are no skills to remove interactively', async () => {
     vi.mocked(baseDir.listBaseSkills).mockResolvedValue([] as never);
 
     await expect(runRemove()).rejects.toMatchObject({ code: 1 });
-    expect(prompts.log.error).toHaveBeenCalledWith(t('noSkillsAvailableInBaseDir'));
+    expect(prompts.log.error).toHaveBeenCalledWith(
+      t('noSkillsAvailableInBaseDir'),
+    );
   });
 });

@@ -8,3 +8,5 @@ yarn-error.log*
 .agents/
 .codex/
 .claude/
+.serena/
+

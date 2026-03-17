@@ -6,9 +6,23 @@ Maintain Agent Skills in a centralized local directory; Install on-demand across
 
 ## Why not [vercel-labs/skills](https://github.com/vercel-labs/skills)?
 
-This project is inspired by [`vercel-labs/skills`](<https://www.google.com/search?q=%5Bhttps://github.com/vercel-labs/skills%5D(https://github.com/vercel-labs/skills)>). We are grateful to the Vercel Labs team for their contribution to the Agent ecosystem.
+This project is inspired by [`vercel-labs/skills`](https://github.com/vercel-labs/skills). We are grateful to the Vercel Labs team for their contribution to the Agent ecosystem.
 
-`vercel-labs/skills` only supports installing skills directly to a project or globally, which often leads to skill files being scattered across multiple locations. Furthermore, when you need to install skills into different projects, you frequently have to look up the original installation commands.
+Typical usage with `vercel-labs/skills`:
+
+- Global install: skills are installed to `~/.agents/skills`, then symlinked into another tool's global skill directory, such as `~/.claude/skills`.
+- Project install: skills are installed to `./.agents/skills`, then symlinked into another tool's project skill directory, such as `./.claude/skills`.
+- Local skills: local skills are copied into `.agents/skills` at the global or project level, then symlinked into the target tool's global or project skill directory.
+- Reinstalling the same skill across multiple projects requires repeating the `add` command and recreating the skill files.
+
+Typical usage with `skls-mgr`:
+
+- Skills are stored centrally in `~/.config/skls-mgr`.
+- Skills can be symlinked on demand into any global or project-level tool skill directory, such as `~/.claude/skills`.
+- Local skills can be placed directly in `~/.config/skls-mgr` and managed in one place.
+- Reinstalling the same skill across multiple projects only requires `install` to pick from the collected skills, without repeating `add` or recreating files.
+
+`skls-mgr` simplifies skill management by keeping maintenance centralized and linking skills only where needed.
 
 ## Quick Start
 
@@ -118,11 +132,13 @@ When `--link` is selected, if the current environment does not support creating 
 
 ## Other Commands
 
-| Command                      | Description                                                                            |
-| ---------------------------- | -------------------------------------------------------------------------------------- |
+| Command                          | Description                                                                                |
+| -------------------------------- | ------------------------------------------------------------------------------------------ |
 | `npx skls-mgr list`              | List all skills in `~/.config/skls-mgr`, distinguishing between managed and manual skills. |
-| `npx skls-mgr update [names...]` | Update one or more skills. Opens interactive mode if no names are provided.            |
-| `npx skls-mgr remove [names...]` | Remove one or more skills. Opens interactive mode if no names are provided.            |
+| `npx skls-mgr update [names...]` | Interactively or by specified names update skills.                                         |
+| `npx skls-mgr remove [names...]` | Interactively or by specified names remove skills.                                         |
+| `npx skls-mgr help`              | Show help.                                                                                 |
+| `npx skls-mgr version`           | Show version.                                                                              |
 
 ### Examples
 
@@ -141,6 +157,12 @@ npx skls-mgr remove
 
 # Remove specific skills by name
 npx skls-mgr remove skill1 skill2
+
+# Show help
+npx skls-mgr help
+
+# Show version
+npx skls-mgr version
 
 ```
 

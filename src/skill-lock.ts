@@ -17,7 +17,10 @@ export async function readSkillLock(): Promise<ManagedSkillLockFile> {
   try {
     const content = await readFile(getLockFilePath(), 'utf-8');
     const parsed = JSON.parse(content) as ManagedSkillLockFile;
-    if (typeof parsed.version !== 'number' || typeof parsed.skills !== 'object') {
+    if (
+      typeof parsed.version !== 'number' ||
+      typeof parsed.skills !== 'object'
+    ) {
       return createEmptyLockFile();
     }
     if (parsed.version < CURRENT_LOCK_VERSION) {
@@ -29,7 +32,9 @@ export async function readSkillLock(): Promise<ManagedSkillLockFile> {
   }
 }
 
-export async function writeSkillLock(lock: ManagedSkillLockFile): Promise<void> {
+export async function writeSkillLock(
+  lock: ManagedSkillLockFile,
+): Promise<void> {
   const lockPath = getLockFilePath();
   await mkdir(dirname(lockPath), { recursive: true });
 
@@ -40,14 +45,15 @@ export async function writeSkillLock(lock: ManagedSkillLockFile): Promise<void> 
 
   await writeFile(
     lockPath,
-    JSON.stringify({ version: lock.version, skills: sortedSkills }, null, 2) + '\n',
-    'utf-8'
+    JSON.stringify({ version: lock.version, skills: sortedSkills }, null, 2) +
+      '\n',
+    'utf-8',
   );
 }
 
 export async function addSkillToLock(
   directoryName: string,
-  entry: Omit<ManagedSkillLockEntry, 'installedAt' | 'updatedAt'>
+  entry: Omit<ManagedSkillLockEntry, 'installedAt' | 'updatedAt'>,
 ): Promise<void> {
   const lock = await readSkillLock();
   const existing = lock.skills[directoryName];
@@ -60,7 +66,9 @@ export async function addSkillToLock(
   await writeSkillLock(lock);
 }
 
-export async function removeSkillFromLock(directoryName: string): Promise<boolean> {
+export async function removeSkillFromLock(
+  directoryName: string,
+): Promise<boolean> {
   const lock = await readSkillLock();
   if (!(directoryName in lock.skills)) {
     return false;
@@ -69,7 +77,6 @@ export async function removeSkillFromLock(directoryName: string): Promise<boolea
   await writeSkillLock(lock);
   return true;
 }
-
 
 export function getGitHubToken(): string | null {
   if (process.env.GITHUB_TOKEN) {
@@ -94,7 +101,7 @@ export async function fetchSkillFolderHash(
   ownerRepo: string,
   skillPath: string,
   token?: string | null,
-  fetchImpl: typeof fetch = fetch
+  fetchImpl: typeof fetch = fetch,
 ): Promise<string | null> {
   let folderPath = skillPath.replace(/\\/g, '/');
   if (folderPath.endsWith('/SKILL.md')) {
@@ -108,13 +115,16 @@ export async function fetchSkillFolderHash(
 
   for (const branch of ['main', 'master']) {
     try {
-      const response = await fetchImpl(`https://api.github.com/repos/${ownerRepo}/git/trees/${branch}?recursive=1`, {
-        headers: {
-          Accept: 'application/vnd.github.v3+json',
-          'User-Agent': 'skls-mgr',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      const response = await fetchImpl(
+        `https://api.github.com/repos/${ownerRepo}/git/trees/${branch}?recursive=1`,
+        {
+          headers: {
+            Accept: 'application/vnd.github.v3+json',
+            'User-Agent': 'skls-mgr',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
         },
-      });
+      );
 
       if (!response.ok) {
         continue;
@@ -129,7 +139,9 @@ export async function fetchSkillFolderHash(
         return data.sha;
       }
 
-      const entry = data.tree.find((item) => item.type === 'tree' && item.path === folderPath);
+      const entry = data.tree.find(
+        (item) => item.type === 'tree' && item.path === folderPath,
+      );
       if (entry) {
         return entry.sha;
       }

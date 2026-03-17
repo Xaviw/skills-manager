@@ -1,8 +1,16 @@
 import { readdir } from 'fs/promises';
 import { join } from 'path';
 import { ensureBaseDir, getBaseDir } from './paths.js';
-import { createDirectorySymlink, removeIfExists, sanitizeName } from './filesystem.js';
-import { addSkillToLock, readSkillLock, removeSkillFromLock } from './skill-lock.js';
+import {
+  createDirectorySymlink,
+  removeIfExists,
+  sanitizeName,
+} from './filesystem.js';
+import {
+  addSkillToLock,
+  readSkillLock,
+  removeSkillFromLock,
+} from './skill-lock.js';
 import type { BaseSkillInfo, ManagedSkillLockEntry } from './types.js';
 
 export async function listBaseSkills(): Promise<BaseSkillInfo[]> {
@@ -10,7 +18,10 @@ export async function listBaseSkills(): Promise<BaseSkillInfo[]> {
   const lock = await readSkillLock();
 
   try {
-    const entries = await readdir(baseDir, { encoding: 'utf8', withFileTypes: true });
+    const entries = await readdir(baseDir, {
+      encoding: 'utf8',
+      withFileTypes: true,
+    });
     return entries
       .filter((entry) => entry.isDirectory())
       .map((entry) => ({
@@ -25,15 +36,19 @@ export async function listBaseSkills(): Promise<BaseSkillInfo[]> {
   }
 }
 
-export async function hasBaseSkillDirectory(directoryName: string): Promise<boolean> {
+export async function hasBaseSkillDirectory(
+  directoryName: string,
+): Promise<boolean> {
   const skills = await listBaseSkills();
-  return skills.some((skill) => skill.directoryName === sanitizeName(directoryName));
+  return skills.some(
+    (skill) => skill.directoryName === sanitizeName(directoryName),
+  );
 }
 
 export async function installSkillToBaseDir(
   sourceDir: string,
   directoryName: string,
-  lockEntry?: Omit<ManagedSkillLockEntry, 'installedAt' | 'updatedAt'>
+  lockEntry?: Omit<ManagedSkillLockEntry, 'installedAt' | 'updatedAt'>,
 ): Promise<string> {
   const baseDir = await ensureBaseDir();
   const sanitizedDirectoryName = sanitizeName(directoryName);
@@ -52,7 +67,7 @@ export async function installSkillToBaseDir(
 export async function installBaseSkillToProject(
   directoryName: string,
   targetRootDir: string,
-  mode: 'copy' | 'link'
+  mode: 'copy' | 'link',
 ): Promise<{ path: string; linked: boolean }> {
   const sourceDir = join(getBaseDir(), directoryName);
   const targetDir = join(targetRootDir, directoryName);
@@ -79,4 +94,3 @@ export async function removeBaseSkill(directoryName: string): Promise<void> {
   await removeIfExists(skillPath);
   await removeSkillFromLock(directoryName);
 }
-

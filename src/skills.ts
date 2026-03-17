@@ -4,7 +4,13 @@ import matter from 'gray-matter';
 import { t } from './i18n.js';
 import type { Skill } from './types.js';
 
-const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', '__pycache__']);
+const SKIP_DIRS = new Set([
+  'node_modules',
+  '.git',
+  'dist',
+  'build',
+  '__pycache__',
+]);
 
 async function hasSkillMd(dir: string): Promise<boolean> {
   try {
@@ -18,7 +24,10 @@ async function hasSkillMd(dir: string): Promise<boolean> {
 export function isSubpathSafe(basePath: string, subpath: string): boolean {
   const normalizedBase = normalize(resolve(basePath));
   const normalizedTarget = normalize(resolve(join(basePath, subpath)));
-  return normalizedTarget.startsWith(normalizedBase + sep) || normalizedTarget === normalizedBase;
+  return (
+    normalizedTarget.startsWith(normalizedBase + sep) ||
+    normalizedTarget === normalizedBase
+  );
 }
 
 export async function parseSkillMd(skillMdPath: string): Promise<Skill | null> {
@@ -39,7 +48,11 @@ export async function parseSkillMd(skillMdPath: string): Promise<Skill | null> {
   }
 }
 
-async function findSkillDirs(dir: string, depth = 0, maxDepth = 5): Promise<string[]> {
+async function findSkillDirs(
+  dir: string,
+  depth = 0,
+  maxDepth = 5,
+): Promise<string[]> {
   if (depth > maxDepth) {
     return [];
   }
@@ -47,11 +60,16 @@ async function findSkillDirs(dir: string, depth = 0, maxDepth = 5): Promise<stri
   const currentDir = (await hasSkillMd(dir)) ? [dir] : [];
 
   try {
-    const entries = await readdir(dir, { encoding: 'utf8', withFileTypes: true });
+    const entries = await readdir(dir, {
+      encoding: 'utf8',
+      withFileTypes: true,
+    });
     const nested = await Promise.all(
       entries
         .filter((entry) => entry.isDirectory() && !SKIP_DIRS.has(entry.name))
-        .map((entry) => findSkillDirs(join(dir, entry.name), depth + 1, maxDepth))
+        .map((entry) =>
+          findSkillDirs(join(dir, entry.name), depth + 1, maxDepth),
+        ),
     );
 
     return [...currentDir, ...nested.flat()];
@@ -60,7 +78,10 @@ async function findSkillDirs(dir: string, depth = 0, maxDepth = 5): Promise<stri
   }
 }
 
-export async function discoverSkills(basePath: string, subpath?: string): Promise<Skill[]> {
+export async function discoverSkills(
+  basePath: string,
+  subpath?: string,
+): Promise<Skill[]> {
   if (subpath && !isSubpathSafe(basePath, subpath)) {
     throw new Error(t('invalidSubpath'));
   }
@@ -80,7 +101,10 @@ export async function discoverSkills(basePath: string, subpath?: string): Promis
   const priorityDirs = [searchPath, join(searchPath, 'skills')];
   for (const dir of priorityDirs) {
     try {
-      const entries = await readdir(dir, { encoding: 'utf8', withFileTypes: true });
+      const entries = await readdir(dir, {
+        encoding: 'utf8',
+        withFileTypes: true,
+      });
       for (const entry of entries) {
         if (!entry.isDirectory()) {
           continue;
@@ -111,8 +135,9 @@ export async function discoverSkills(basePath: string, subpath?: string): Promis
   return skills;
 }
 
-
 export function filterSkills(skills: Skill[], inputNames: string[]): Skill[] {
   const normalizedInputs = inputNames.map((name) => name.toLowerCase());
-  return skills.filter((skill) => normalizedInputs.includes(skill.name.toLowerCase()));
+  return skills.filter((skill) =>
+    normalizedInputs.includes(skill.name.toLowerCase()),
+  );
 }
