@@ -6,6 +6,7 @@ import {
   listPromptCancelSymbol,
   measureDisplayWidth,
   multiselectListPrompt,
+  selectListPrompt,
   summarizeSelectedLabels,
   truncateDisplayText,
 } from '../src/list-prompt.js';
@@ -137,5 +138,39 @@ describe('list prompt lifecycle', () => {
 
     expect(await resultPromise).toEqual(['skill-one']);
     expect(process.stdin.pause).toHaveBeenCalled();
+  });
+
+  it('submits the focused option in a single-select prompt', async () => {
+    const resultPromise = selectListPrompt({
+      message: 'Installation mode',
+      options: [
+        { value: 'link', label: 'link' },
+        { value: 'copy', label: 'copy' },
+      ],
+    });
+
+    await Promise.resolve();
+    process.stdin.emit('keypress', '', { name: 'down' });
+    process.stdin.emit('keypress', '', { name: 'return' });
+
+    expect(await resultPromise).toBe('copy');
+    expect(process.stdin.pause).toHaveBeenCalled();
+  });
+
+  it('respects the initial single-select value when navigating back upward', async () => {
+    const resultPromise = selectListPrompt({
+      message: 'Installation mode',
+      options: [
+        { value: 'link', label: 'link' },
+        { value: 'copy', label: 'copy' },
+      ],
+      initialValue: 'copy',
+    });
+
+    await Promise.resolve();
+    process.stdin.emit('keypress', '', { name: 'up' });
+    process.stdin.emit('keypress', '', { name: 'return' });
+
+    expect(await resultPromise).toBe('link');
   });
 });

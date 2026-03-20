@@ -296,6 +296,17 @@ async function runListPrompt<Value>(options: {
 
     let cursor = options.cursor;
     let lastRenderHeight = 0;
+    const syncSingleSelectionToCursor = (): void => {
+      if (options.mode !== 'single') {
+        return;
+      }
+
+      const option = options.options[cursor];
+      options.selected.clear();
+      if (option) {
+        options.selected.add(option.value);
+      }
+    };
 
     const cleanup = (): void => {
       process.stdin.removeListener('keypress', keypressHandler);
@@ -389,9 +400,7 @@ async function runListPrompt<Value>(options: {
         }
       } else if (state === 'submit') {
         if (options.mode === 'single') {
-          const selectedOption = options.options.find((option) =>
-            options.selected.has(option.value),
-          );
+          const selectedOption = options.options[cursor];
           lines.push(
             buildLine(
               `${S_BAR}  `,
@@ -437,9 +446,7 @@ async function runListPrompt<Value>(options: {
       cleanup();
 
       if (options.mode === 'single') {
-        const selectedOption = options.options.find((option) =>
-          options.selected.has(option.value),
-        );
+        const selectedOption = options.options[cursor];
         resolve(selectedOption?.value ?? listPromptCancelSymbol);
         return;
       }
@@ -483,12 +490,14 @@ async function runListPrompt<Value>(options: {
 
       if (key.name === 'up') {
         cursor = Math.max(0, cursor - 1);
+        syncSingleSelectionToCursor();
         render();
         return;
       }
 
       if (key.name === 'down') {
         cursor = Math.min(options.options.length - 1, cursor + 1);
+        syncSingleSelectionToCursor();
         render();
         return;
       }
@@ -525,13 +534,7 @@ async function runListPrompt<Value>(options: {
         options.mode === 'single' &&
         (key.name === 'space' || key.name === 'right')
       ) {
-        const option = options.options[cursor];
-        if (!option) {
-          return;
-        }
-
-        options.selected.clear();
-        options.selected.add(option.value);
+        syncSingleSelectionToCursor();
         render();
       }
     };
