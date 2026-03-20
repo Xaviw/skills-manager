@@ -11,7 +11,6 @@ describe('dist build', () => {
         cwd: process.cwd(),
         encoding: 'utf-8',
         stdio: 'pipe',
-        shell: true,
       });
 
       const output = execFileSync(
