@@ -10,13 +10,23 @@ import {
   fetchSkillFolderHash,
   getGitHubToken,
   readSkillLock,
+  writeSkillLock,
 } from './skill-lock.js';
+import {
+  createProgressSpinner,
+  type ProgressSpinner,
+} from './progress-spinner.js';
 import { parseSource } from './source-parser.js';
+import type { ManagedSkillLockEntry } from './types.js';
 
 const DEFAULT_UPDATE_CHECK_CONCURRENCY = 4;
+const DEFAULT_UPDATE_INSTALL_CONCURRENCY = 2;
 
-type UpdateSpinner = ReturnType<typeof p.spinner>;
 type UpdateEntry = Awaited<ReturnType<typeof readSkillLock>>['skills'][string];
+type PendingManagedSkillLockEntry = Omit<
+  ManagedSkillLockEntry,
+  'installedAt' | 'updatedAt'
+>;
 
 interface UpdateCheckResult {
   directoryName: string;
@@ -24,6 +34,13 @@ interface UpdateCheckResult {
   reason?: string;
   latestHash?: string;
   entry: UpdateEntry;
+}
+
+interface UpdateInstallResult {
+  directoryName: string;
+  outcome: 'success' | 'failure';
+  reason?: string;
+  lockEntry?: PendingManagedSkillLockEntry;
 }
 
 function getSkipReason(entry: {
@@ -92,13 +109,38 @@ async function mapWithConcurrency<T, R>(
   return results;
 }
 
+async function persistUpdatedSkills(
+  updates: Array<{
+    directoryName: string;
+    lockEntry: PendingManagedSkillLockEntry;
+  }>,
+): Promise<void> {
+  if (updates.length === 0) {
+    return;
+  }
+
+  const lock = await readSkillLock();
+  const now = new Date().toISOString();
+
+  for (const update of updates) {
+    const existing = lock.skills[update.directoryName];
+    lock.skills[update.directoryName] = {
+      ...update.lockEntry,
+      installedAt: existing?.installedAt ?? now,
+      updatedAt: now,
+    };
+  }
+
+  await writeSkillLock(lock);
+}
+
 export async function runUpdate(
   options: {
     isInteractive?: boolean;
     promptMultiselect?: typeof multiselectListPrompt;
     logPromptHelp?: (helpText: string) => void;
     skillNames?: string[];
-    createSpinner?: () => UpdateSpinner;
+    createSpinner?: () => ProgressSpinner;
     shouldRenderProgress?: boolean;
     checkConcurrency?: number;
   } = {},
@@ -175,7 +217,7 @@ export async function runUpdate(
   const skipped: Array<{ directoryName: string; reason: string }> = [];
   const shouldRenderProgress =
     options.shouldRenderProgress ?? Boolean(process.stdout.isTTY);
-  const createSpinner = options.createSpinner ?? (() => p.spinner());
+  const createSpinner = options.createSpinner ?? createProgressSpinner;
   const checkSpinner =
     shouldRenderProgress && entriesToCheck.length > 0 ? createSpinner() : null;
 
@@ -187,79 +229,81 @@ export async function runUpdate(
     ),
   );
 
-  const updateCheckResults = await mapWithConcurrency(
-    entriesToCheck,
-    options.checkConcurrency ?? DEFAULT_UPDATE_CHECK_CONCURRENCY,
-    async ([directoryName, entry]): Promise<UpdateCheckResult> => {
-      if (!entry.skillFolderHash || !entry.skillPath) {
-        return {
-          directoryName,
-          outcome: 'skip',
-          reason: getSkipReason(entry),
-          entry,
-        };
-      }
-
-      try {
-        const latestHash = await fetchSkillFolderHash(
-          entry.source,
-          entry.skillPath,
-          token,
-        );
-        if (!latestHash) {
+  let updateCheckResults: UpdateCheckResult[];
+  try {
+    updateCheckResults = await mapWithConcurrency(
+      entriesToCheck,
+      options.checkConcurrency ?? DEFAULT_UPDATE_CHECK_CONCURRENCY,
+      async ([directoryName, entry]): Promise<UpdateCheckResult> => {
+        if (!entry.skillFolderHash || !entry.skillPath) {
           return {
             directoryName,
             outcome: 'skip',
-            reason: t('couldNotFetchFromGitHub'),
+            reason: getSkipReason(entry),
             entry,
           };
         }
 
-        if (
-          requestedSkillNames.length > 0 ||
-          latestHash !== entry.skillFolderHash
-        ) {
+        try {
+          const latestHash = await fetchSkillFolderHash(
+            entry.source,
+            entry.skillPath,
+            token,
+          );
+          if (!latestHash) {
+            return {
+              directoryName,
+              outcome: 'skip',
+              reason: t('couldNotFetchFromGitHub'),
+              entry,
+            };
+          }
+
+          if (
+            requestedSkillNames.length > 0 ||
+            latestHash !== entry.skillFolderHash
+          ) {
+            return {
+              directoryName,
+              outcome: 'update',
+              latestHash,
+              entry,
+            };
+          }
+
           return {
             directoryName,
-            outcome: 'update',
-            latestHash,
+            outcome: 'noop',
+            entry,
+          };
+        } catch {
+          return {
+            directoryName,
+            outcome: 'skip',
+            reason: t('failedToCheckUpdate'),
             entry,
           };
         }
-
-        return {
-          directoryName,
-          outcome: 'noop',
-          entry,
-        };
-      } catch {
-        return {
-          directoryName,
-          outcome: 'skip',
-          reason: t('failedToCheckUpdate'),
-          entry,
-        };
-      }
-    },
-    ([directoryName], _index, completedCount) => {
-      checkSpinner?.message(
-        getProgressMessage(
-          'checkingSkillUpdatesProgress',
-          completedCount,
-          entriesToCheck.length,
-          directoryName,
-        ),
-      );
-    },
-  );
-
-  checkSpinner?.stop(
-    getProgressMessage(
-      'checkingSkillUpdatesProgress',
-      entriesToCheck.length,
-      entriesToCheck.length,
-    ),
-  );
+      },
+      ([_directoryName], _index, completedCount) => {
+        checkSpinner?.message(
+          getProgressMessage(
+            'checkingSkillUpdatesProgress',
+            completedCount,
+            entriesToCheck.length,
+          ),
+        );
+      },
+    );
+  } finally {
+    checkSpinner?.stop(
+      getProgressMessage(
+        'checkingSkillUpdatesProgress',
+        entriesToCheck.length,
+        entriesToCheck.length,
+      ),
+    );
+  }
 
   for (const result of updateCheckResults) {
     if (result.outcome === 'skip') {
@@ -331,7 +375,6 @@ export async function runUpdate(
     return;
   }
 
-  const successfulUpdates: string[] = [];
   const failedUpdates: Array<{ directoryName: string; reason: string }> = [];
   const updateSpinner =
     shouldRenderProgress && selectedUpdates.length > 0 ? createSpinner() : null;
@@ -340,71 +383,123 @@ export async function runUpdate(
     getProgressMessage('updatingSkillsProgress', 0, selectedUpdates.length),
   );
 
-  for (const [index, update] of selectedUpdates.entries()) {
-    let tempDir: string | null = null;
+  let updateInstallResults: UpdateInstallResult[];
+  try {
+    updateInstallResults = await mapWithConcurrency(
+      selectedUpdates,
+      DEFAULT_UPDATE_INSTALL_CONCURRENCY,
+      async (update): Promise<UpdateInstallResult> => {
+        let tempDir: string | null = null;
 
-    try {
-      updateSpinner?.message(
-        getProgressMessage(
-          'updatingSkillsProgress',
-          index + 1,
-          selectedUpdates.length,
-          update.directoryName,
-        ),
-      );
+        try {
+          const parsed = parseSource(update.entry.sourceUrl);
+          const sourceDir =
+            parsed.type === 'local'
+              ? parsed.localPath!
+              : ((tempDir = await cloneRepo(parsed.url, parsed.ref)), tempDir);
 
-      const parsed = parseSource(update.entry.sourceUrl);
-      const sourceDir =
-        parsed.type === 'local'
-          ? parsed.localPath!
-          : ((tempDir = await cloneRepo(parsed.url, parsed.ref)), tempDir);
+          const allSkills = await discoverSkills(sourceDir, parsed.subpath);
+          const matchedSkill = allSkills.find((skill) => {
+            const skillPath = relative(sourceDir, skill.path)
+              .split('\\')
+              .join('/');
+            const skillMdRelativePath = skillPath
+              ? `${skillPath}/SKILL.md`
+              : 'SKILL.md';
+            return skillMdRelativePath === update.entry.skillPath;
+          });
 
-      const allSkills = await discoverSkills(sourceDir, parsed.subpath);
-      const matchedSkill = allSkills.find((skill) => {
-        const skillPath = relative(sourceDir, skill.path).split('\\').join('/');
-        const skillMdRelativePath = skillPath
-          ? `${skillPath}/SKILL.md`
-          : 'SKILL.md';
-        return skillMdRelativePath === update.entry.skillPath;
+          if (!matchedSkill) {
+            return {
+              directoryName: update.directoryName,
+              outcome: 'failure',
+              reason: t('couldNotLocateSkillInSource'),
+            };
+          }
+
+          await installSkillToBaseDir(matchedSkill.path, update.directoryName);
+
+          return {
+            directoryName: update.directoryName,
+            outcome: 'success',
+            lockEntry: {
+              displayName: matchedSkill.name,
+              source: update.entry.source,
+              sourceType: update.entry.sourceType,
+              sourceUrl: update.entry.sourceUrl,
+              skillPath: update.entry.skillPath,
+              skillFolderHash: update.latestHash,
+            },
+          };
+        } catch (error) {
+          return {
+            directoryName: update.directoryName,
+            outcome: 'failure',
+            reason: error instanceof Error ? error.message : t('unknownError'),
+          };
+        } finally {
+          if (tempDir) {
+            await cleanupTempDir(tempDir).catch(() => {});
+          }
+        }
+      },
+      (_update, _index, completedCount) => {
+        updateSpinner?.message(
+          getProgressMessage(
+            'updatingSkillsProgress',
+            completedCount,
+            selectedUpdates.length,
+          ),
+        );
+      },
+    );
+  } finally {
+    updateSpinner?.stop(
+      getProgressMessage(
+        'updatingSkillsProgress',
+        selectedUpdates.length,
+        selectedUpdates.length,
+      ),
+    );
+  }
+
+  const pendingLockUpdates: Array<{
+    directoryName: string;
+    lockEntry: PendingManagedSkillLockEntry;
+  }> = [];
+
+  for (const result of updateInstallResults) {
+    if (result.outcome === 'failure') {
+      failedUpdates.push({
+        directoryName: result.directoryName,
+        reason: result.reason!,
       });
+      continue;
+    }
 
-      if (!matchedSkill) {
+    pendingLockUpdates.push({
+      directoryName: result.directoryName,
+      lockEntry: result.lockEntry!,
+    });
+  }
+
+  let successfulUpdates: string[] = [];
+  if (pendingLockUpdates.length > 0) {
+    try {
+      await persistUpdatedSkills(pendingLockUpdates);
+      successfulUpdates = pendingLockUpdates.map(
+        (update) => update.directoryName,
+      );
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : t('unknownError');
+      for (const update of pendingLockUpdates) {
         failedUpdates.push({
           directoryName: update.directoryName,
-          reason: t('couldNotLocateSkillInSource'),
+          reason,
         });
-        continue;
-      }
-
-      await installSkillToBaseDir(matchedSkill.path, update.directoryName, {
-        displayName: matchedSkill.name,
-        source: update.entry.source,
-        sourceType: update.entry.sourceType,
-        sourceUrl: update.entry.sourceUrl,
-        skillPath: update.entry.skillPath,
-        skillFolderHash: update.latestHash,
-      });
-
-      successfulUpdates.push(update.directoryName);
-    } catch (error) {
-      failedUpdates.push({
-        directoryName: update.directoryName,
-        reason: error instanceof Error ? error.message : t('unknownError'),
-      });
-    } finally {
-      if (tempDir) {
-        await cleanupTempDir(tempDir).catch(() => {});
       }
     }
   }
-
-  updateSpinner?.stop(
-    getProgressMessage(
-      'updatingSkillsProgress',
-      selectedUpdates.length,
-      selectedUpdates.length,
-    ),
-  );
 
   console.log(t('updatedSkills', { count: successfulUpdates.length }));
   printNamedList(t('failedUpdates'), failedUpdates);

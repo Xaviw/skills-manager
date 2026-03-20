@@ -1,10 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import {
   fitOptionText,
   formatOverflowSummary,
   isListPromptCancel,
   listPromptCancelSymbol,
   measureDisplayWidth,
+  multiselectListPrompt,
   summarizeSelectedLabels,
   truncateDisplayText,
 } from '../src/list-prompt.js';
@@ -14,6 +15,8 @@ describe('list prompt helpers', () => {
     expect(measureDisplayWidth('abc')).toBe(3);
     expect(measureDisplayWidth('选择')).toBe(4);
     expect(measureDisplayWidth('a选b')).toBe(4);
+    expect(measureDisplayWidth('│ ❯ ')).toBe(4);
+    expect(measureDisplayWidth('🙂')).toBe(2);
   });
 
   it('truncates text to the requested visible width', () => {
@@ -58,5 +61,81 @@ describe('list prompt helpers', () => {
   it('detects the custom cancel symbol', () => {
     expect(isListPromptCancel(listPromptCancelSymbol)).toBe(true);
     expect(isListPromptCancel(Symbol('other'))).toBe(false);
+  });
+});
+
+describe('list prompt lifecycle', () => {
+  let originalIsTTY: PropertyDescriptor | undefined;
+  let originalColumns: PropertyDescriptor | undefined;
+  let originalSetRawMode: typeof process.stdin.setRawMode | undefined;
+
+  beforeEach(() => {
+    originalIsTTY = Object.getOwnPropertyDescriptor(process.stdin, 'isTTY');
+    originalColumns = Object.getOwnPropertyDescriptor(
+      process.stdout,
+      'columns',
+    );
+    originalSetRawMode = process.stdin.setRawMode;
+
+    Object.defineProperty(process.stdin, 'isTTY', {
+      value: true,
+      configurable: true,
+    });
+    Object.defineProperty(process.stdout, 'columns', {
+      value: 80,
+      configurable: true,
+    });
+    process.stdin.setRawMode = vi.fn();
+
+    vi.spyOn(process.stdin, 'pause').mockImplementation(() => process.stdin);
+    vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+  });
+
+  afterEach(() => {
+    process.stdin.removeAllListeners('keypress');
+    vi.restoreAllMocks();
+
+    if (originalIsTTY) {
+      Object.defineProperty(process.stdin, 'isTTY', originalIsTTY);
+    }
+    if (originalColumns) {
+      Object.defineProperty(process.stdout, 'columns', originalColumns);
+    }
+    if (originalSetRawMode) {
+      process.stdin.setRawMode = originalSetRawMode;
+    } else {
+      process.stdin.setRawMode = undefined as never;
+    }
+  });
+
+  it('pauses stdin after canceling a multiselect prompt', async () => {
+    const resultPromise = multiselectListPrompt({
+      message: 'Select skills',
+      options: [{ value: 'skill-one', label: 'skill-one' }],
+      required: true,
+    });
+
+    await Promise.resolve();
+    process.stdin.emit('keypress', '', { name: 'escape' });
+
+    expect(await resultPromise).toBe(listPromptCancelSymbol);
+    expect(process.stdin.setRawMode).toHaveBeenCalledWith(true);
+    expect(process.stdin.setRawMode).toHaveBeenCalledWith(false);
+    expect(process.stdin.pause).toHaveBeenCalled();
+  });
+
+  it('pauses stdin after submitting a multiselect prompt', async () => {
+    const resultPromise = multiselectListPrompt({
+      message: 'Select skills',
+      options: [{ value: 'skill-one', label: 'skill-one' }],
+      initialValues: ['skill-one'],
+      required: true,
+    });
+
+    await Promise.resolve();
+    process.stdin.emit('keypress', '', { name: 'return' });
+
+    expect(await resultPromise).toEqual(['skill-one']);
+    expect(process.stdin.pause).toHaveBeenCalled();
   });
 });

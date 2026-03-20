@@ -97,18 +97,22 @@ npx skls-mgr install
 
 ### 选项
 
-| 选项               | 说明                                                                   |
-| ------------------ | ---------------------------------------------------------------------- |
-| `-a, --all`        | 安装全部技能，未指定时支持交互式选择所需技能                           |
-| `-d, --dir <path>` | 安装到目标目录，支持相对路径或绝对路径，未指定时支持交互式输入目标目录 |
-| `-l, --link`       | 使用符号链接，未指定时支持交互式选择使用符号链接或复制方式             |
-| `-c, --copy`       | 使用复制方式，未指定时支持交互式选择使用符号链接或复制方式             |
+| 选项                     | 说明                                                                   |
+| ------------------------ | ---------------------------------------------------------------------- |
+| `-s, --skill <names...>` | 直接指定要安装的技能名，跳过交互式技能选择                             |
+| `-a, --all`              | 安装全部技能，未指定时支持交互式选择所需技能                           |
+| `-d, --dir <path>`       | 安装到目标目录，支持相对路径或绝对路径，未指定时支持交互式输入目标目录 |
+| `-l, --link`             | 使用符号链接，未指定时支持交互式选择使用符号链接或复制方式             |
+| `-c, --copy`             | 使用复制方式，未指定时支持交互式选择使用符号链接或复制方式             |
 
 ### 示例
 
 ```bash
 # 交互式安装到项目
 npx skls-mgr install
+
+# 安装指定技能，跳过交互式选择
+npx skls-mgr install --skill skill-one skill-two --dir ./.claude/skills --link
 
 # 将所有技能复制到 Claude Code 技能目录
 npx skls-mgr install --all --dir ./.claude/skills --copy
@@ -128,6 +132,7 @@ npx skls-mgr install --dir ./.agents/skills --link
 
 | 命令                             | 说明                                                               |
 | -------------------------------- | ------------------------------------------------------------------ |
+| `npx skls-mgr find [query]`      | 搜索远程技能；不传关键词时可交互式搜索并添加选中的技能             |
 | `npx skls-mgr list`              | 列出 `~/.config/skls-mgr` 中的全部技能，支持区分托管技能与手动技能 |
 | `npx skls-mgr update [names...]` | 交互式或根据指定名称更新技能                                       |
 | `npx skls-mgr remove [names...]` | 交互式或根据指定名称删除技能                                       |
@@ -139,6 +144,12 @@ npx skls-mgr install --dir ./.agents/skills --link
 ```bash
 # 显示全部技能（包括手动添加技能）
 npx skls-mgr list
+
+# 按关键词搜索远程技能
+npx skls-mgr find react performance
+
+# 交互式搜索，并添加选中的技能
+npx skls-mgr find
 
 # 交互式更新技能
 npx skls-mgr update
@@ -160,6 +171,21 @@ npx skls-mgr version
 ```
 
 > `skls-mgr update` 依赖 GitHub API。为避免匿名请求带来的限流限制（每小时 60 次），建议在环境变量中配置 `GITHUB_TOKEN` 或 `GH_TOKEN` 以提升配额（每小时 5000 次）。
+
+## find-skills
+
+推荐使用本项目中的 `find-skills` 技能，让 AI 帮你查找可能有用的技能并安装。
+
+```bash
+# 添加技能
+npx skls-mgr add Xaviw/skills-manager --skill find-skills
+
+# 安装技能到全局
+npx skls-mgr install --skill find-skills --dir ~/.claude/skills --link
+
+# 或者按需安装到项目
+npx skls-mgr install --skill find-skills --dir ./.claude/skills --link
+```
 
 ## License
 

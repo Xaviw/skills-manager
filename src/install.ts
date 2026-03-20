@@ -1,6 +1,7 @@
 import * as p from '@clack/prompts';
 import { mkdir } from 'fs/promises';
 import * as readline from 'node:readline';
+import { homedir } from 'os';
 import { isAbsolute, resolve } from 'path';
 import pc from 'picocolors';
 import { installBaseSkillToProject, listBaseSkills } from './base-dir.js';
@@ -20,6 +21,7 @@ import {
 
 export interface InstallOptions {
   all?: boolean;
+  skill?: string[];
   dir?: string;
   link?: boolean;
   copy?: boolean;
@@ -28,6 +30,16 @@ export interface InstallOptions {
 interface EditableTargetDirectoryOption {
   value: string;
   placeholder?: string;
+}
+
+interface EditableTargetDirectoryInputState {
+  value: string;
+  cursorOffset: number;
+}
+
+interface EditableTargetDirectoryActiveLine {
+  line: string;
+  cursorColumn: number;
 }
 
 interface PromptForTargetDirDependencies {
@@ -49,7 +61,6 @@ const S_STEP_SUBMIT = pc.green('◇');
 const S_BAR = pc.dim('│');
 const S_FOOT = pc.dim('└');
 const S_POINTER = pc.cyan('❯');
-const INPUT_CURSOR = pc.inverse(' ');
 const INSTALL_TARGET_SHORTCUT_VALUES = new Set<string>([
   '.agents/skills/',
   '.claude/skills/',
@@ -65,6 +76,20 @@ export function parseInstallOptions(args: string[]): InstallOptions {
 
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
+    if (arg === '-s' || arg === '--skill') {
+      options.skill = options.skill || [];
+      index += 1;
+      while (
+        index < args.length &&
+        args[index] &&
+        !args[index]!.startsWith('-')
+      ) {
+        options.skill.push(args[index]!);
+        index += 1;
+      }
+      index -= 1;
+      continue;
+    }
     if (arg === '-a' || arg === '--all') {
       options.all = true;
       continue;
@@ -87,7 +112,22 @@ export function parseInstallOptions(args: string[]): InstallOptions {
 }
 
 function resolveTargetDir(inputDir: string): string {
-  return isAbsolute(inputDir) ? inputDir : resolve(process.cwd(), inputDir);
+  const expandedInputDir = expandHomeDirectory(inputDir);
+  return isAbsolute(expandedInputDir)
+    ? expandedInputDir
+    : resolve(process.cwd(), expandedInputDir);
+}
+
+function expandHomeDirectory(inputDir: string): string {
+  if (inputDir === '~') {
+    return homedir();
+  }
+
+  if (inputDir.startsWith('~/') || inputDir.startsWith('~\\')) {
+    return resolve(homedir(), inputDir.slice(2));
+  }
+
+  return inputDir;
 }
 
 function clearPromptRender(lastRenderHeight: number): void {
@@ -152,23 +192,202 @@ function shouldSaveTargetDirectory(targetDir: string): boolean {
   return !INSTALL_TARGET_SHORTCUT_VALUES.has(targetDir.trim());
 }
 
-function buildActiveLine(
+function clampEditableCursorOffset(
+  value: string,
+  cursorOffset: number,
+): number {
+  return Math.max(0, Math.min(Array.from(value).length, cursorOffset));
+}
+
+function getVisibleEditableText(
+  value: string,
+  cursorOffset: number,
+  maxWidth: number,
+): { before: string; after: string } {
+  const characters = Array.from(value);
+  const safeCursorOffset = clampEditableCursorOffset(value, cursorOffset);
+
+  if (maxWidth <= 0) {
+    return { before: '', after: '' };
+  }
+
+  let bestWindow = {
+    start: safeCursorOffset,
+    end: safeCursorOffset,
+    visibleChars: 0,
+    width: 0,
+    hiddenChars: characters.length,
+    balance: 0,
+  };
+
+  for (let start = 0; start <= safeCursorOffset; start += 1) {
+    for (let end = safeCursorOffset; end <= characters.length; end += 1) {
+      const before = characters.slice(start, safeCursorOffset).join('');
+      const after = characters.slice(safeCursorOffset, end).join('');
+      const leftEllipsis = start > 0 ? '...' : '';
+      const rightEllipsis = end < characters.length ? '...' : '';
+      const displayWidth = measureDisplayWidth(
+        `${leftEllipsis}${before}${after}${rightEllipsis}`,
+      );
+
+      if (displayWidth > maxWidth) {
+        continue;
+      }
+
+      const visibleChars = end - start;
+      const hiddenChars = start + (characters.length - end);
+      const balance = Math.abs(
+        safeCursorOffset - start - (end - safeCursorOffset),
+      );
+      const shouldReplace =
+        visibleChars > bestWindow.visibleChars ||
+        (visibleChars === bestWindow.visibleChars &&
+          displayWidth > bestWindow.width) ||
+        (visibleChars === bestWindow.visibleChars &&
+          displayWidth === bestWindow.width &&
+          hiddenChars < bestWindow.hiddenChars) ||
+        (visibleChars === bestWindow.visibleChars &&
+          displayWidth === bestWindow.width &&
+          hiddenChars === bestWindow.hiddenChars &&
+          balance < bestWindow.balance);
+
+      if (shouldReplace) {
+        bestWindow = {
+          start,
+          end,
+          visibleChars,
+          width: displayWidth,
+          hiddenChars,
+          balance,
+        };
+      }
+    }
+  }
+
+  return {
+    before: `${bestWindow.start > 0 ? '...' : ''}${characters
+      .slice(bestWindow.start, safeCursorOffset)
+      .join('')}`,
+    after: `${characters.slice(safeCursorOffset, bestWindow.end).join('')}${
+      bestWindow.end < characters.length ? '...' : ''
+    }`,
+  };
+}
+
+export function applyEditableTargetDirectoryInput(
+  state: EditableTargetDirectoryInputState,
+  str: string,
+  key: readline.Key,
+): EditableTargetDirectoryInputState {
+  const characters = Array.from(state.value);
+  const cursorOffset = clampEditableCursorOffset(
+    state.value,
+    state.cursorOffset,
+  );
+
+  if (key.name === 'left') {
+    return {
+      value: state.value,
+      cursorOffset: Math.max(0, cursorOffset - 1),
+    };
+  }
+
+  if (key.name === 'right') {
+    return {
+      value: state.value,
+      cursorOffset: Math.min(characters.length, cursorOffset + 1),
+    };
+  }
+
+  if (key.name === 'backspace') {
+    if (cursorOffset === 0) {
+      return { value: state.value, cursorOffset };
+    }
+
+    characters.splice(cursorOffset - 1, 1);
+    return {
+      value: characters.join(''),
+      cursorOffset: cursorOffset - 1,
+    };
+  }
+
+  if (key.name === 'delete') {
+    if (cursorOffset >= characters.length) {
+      return { value: state.value, cursorOffset };
+    }
+
+    characters.splice(cursorOffset, 1);
+    return {
+      value: characters.join(''),
+      cursorOffset,
+    };
+  }
+
+  if (!isPrintableInput(str, key)) {
+    return { value: state.value, cursorOffset };
+  }
+
+  characters.splice(cursorOffset, 0, ...Array.from(str));
+  return {
+    value: characters.join(''),
+    cursorOffset: cursorOffset + Array.from(str).length,
+  };
+}
+
+export function buildActiveLine(
   prefix: string,
   entry: EditableTargetDirectoryOption,
   maxWidth: number,
-): string {
-  const availableWidth = Math.max(
-    0,
-    maxWidth - measureDisplayWidth(prefix) - 1,
-  );
+  cursorOffset: number,
+): EditableTargetDirectoryActiveLine {
+  const availableWidth = Math.max(0, maxWidth - measureDisplayWidth(prefix));
   if (entry.value) {
-    return `${prefix}${truncateFromStart(entry.value, availableWidth)}${INPUT_CURSOR}`;
+    const visibleText = getVisibleEditableText(
+      entry.value,
+      cursorOffset,
+      availableWidth,
+    );
+    return {
+      line: `${prefix}${visibleText.before}${visibleText.after}`,
+      cursorColumn: measureDisplayWidth(`${prefix}${visibleText.before}`) + 1,
+    };
   }
 
   const placeholder = entry.placeholder
     ? truncateFromStart(entry.placeholder, availableWidth)
     : '';
-  return `${prefix}${pc.dim(placeholder)}${INPUT_CURSOR}`;
+  return {
+    line: `${prefix}${pc.dim(placeholder)}`,
+    cursorColumn: measureDisplayWidth(prefix) + 1,
+  };
+}
+
+function moveEditablePromptCursorToRenderEnd(
+  renderHeight: number,
+  activeLineIndex: number | null,
+): void {
+  if (renderHeight <= 0 || activeLineIndex === null) {
+    return;
+  }
+
+  const downLines = renderHeight - activeLineIndex;
+  if (downLines > 0) {
+    process.stdout.write(`\x1b[${downLines}B`);
+  }
+  process.stdout.write('\r');
+}
+
+function positionEditablePromptCursor(
+  renderHeight: number,
+  activeLineIndex: number,
+  cursorColumn: number,
+): void {
+  const upLines = renderHeight - activeLineIndex;
+  process.stdout.write('\x1b[?25h');
+  if (upLines > 0) {
+    process.stdout.write(`\x1b[${upLines}A`);
+  }
+  process.stdout.write(`\x1b[${cursorColumn}G`);
 }
 
 export async function editableTargetDirectoryPrompt(options: {
@@ -189,6 +408,10 @@ export async function editableTargetDirectoryPrompt(options: {
 
     let cursor = 0;
     let lastRenderHeight = 0;
+    let lastActiveLineIndex: number | null = null;
+    const entryCursorOffsets = entries.map(
+      (entry) => Array.from(entry.value).length,
+    );
 
     const cleanup = (): void => {
       process.stdin.removeListener('keypress', keypressHandler);
@@ -201,7 +424,13 @@ export async function editableTargetDirectoryPrompt(options: {
     };
 
     const render = (state: 'active' | 'submit' | 'cancel' = 'active'): void => {
+      process.stdout.write('\x1b[?25l');
+      moveEditablePromptCursorToRenderEnd(
+        lastRenderHeight,
+        lastActiveLineIndex,
+      );
       clearPromptRender(lastRenderHeight);
+      lastActiveLineIndex = null;
 
       const width = Math.max((process.stdout.columns ?? 80) - 4, 20);
       const headerPrefix =
@@ -211,14 +440,23 @@ export async function editableTargetDirectoryPrompt(options: {
             ? `${S_STEP_SUBMIT} `
             : `${S_STEP_CANCEL} `;
       const lines = [`${headerPrefix}${pc.bold(options.message)}`, S_BAR];
+      let activeLine: EditableTargetDirectoryActiveLine | null = null;
+      let activeLineIndex: number | null = null;
 
-      entries.forEach((entry, index) => {
+      for (const [index, entry] of entries.entries()) {
         const isActive = state === 'active' && index === cursor;
         const prefix = isActive ? `${S_BAR} ${S_POINTER} ` : `${S_BAR}   `;
 
         if (isActive) {
-          lines.push(buildActiveLine(prefix, entry, width));
-          return;
+          activeLine = buildActiveLine(
+            prefix,
+            entry,
+            width,
+            entryCursorOffsets[index] ?? 0,
+          );
+          activeLineIndex = lines.length;
+          lines.push(activeLine.line);
+          continue;
         }
 
         const availableWidth = Math.max(0, width - measureDisplayWidth(prefix));
@@ -230,11 +468,25 @@ export async function editableTargetDirectoryPrompt(options: {
                 : '',
             );
         lines.push(`${prefix}${display}`);
-      });
+      }
 
       lines.push(S_FOOT);
       process.stdout.write(`${lines.join('\n')}\n`);
       lastRenderHeight = lines.length;
+
+      const renderedActiveLine = activeLine;
+      const renderedActiveLineIndex = activeLineIndex;
+      if (renderedActiveLine !== null && renderedActiveLineIndex !== null) {
+        lastActiveLineIndex = renderedActiveLineIndex;
+        positionEditablePromptCursor(
+          lastRenderHeight,
+          renderedActiveLineIndex,
+          renderedActiveLine.cursorColumn,
+        );
+        return;
+      }
+
+      process.stdout.write('\x1b[?25h');
     };
 
     const submit = (): void => {
@@ -286,25 +538,29 @@ export async function editableTargetDirectoryPrompt(options: {
         return;
       }
 
-      if (key.name === 'backspace' || key.name === 'delete') {
-        const entry = entries[cursor];
-        if (!entry?.value) {
-          render();
-          return;
-        }
-
-        entry.value = entry.value.slice(0, -1);
-        render();
-        return;
-      }
-
-      if (isPrintableInput(str, key)) {
+      if (
+        key.name === 'left' ||
+        key.name === 'right' ||
+        key.name === 'backspace' ||
+        key.name === 'delete' ||
+        isPrintableInput(str, key)
+      ) {
         const entry = entries[cursor];
         if (!entry) {
           return;
         }
 
-        entry.value += str;
+        const nextState = applyEditableTargetDirectoryInput(
+          {
+            value: entry.value,
+            cursorOffset: entryCursorOffsets[cursor] ?? 0,
+          },
+          str,
+          key,
+        );
+
+        entry.value = nextState.value;
+        entryCursorOffsets[cursor] = nextState.cursorOffset;
         render();
       }
     };
@@ -348,7 +604,19 @@ export async function runInstall(
     dependencies.saveTargetDirectory ?? addSavedTargetDirectory;
 
   let selectedNames = skills.map((skill) => skill.directoryName);
-  if (!options.all) {
+  if (options.skill?.length) {
+    const uniqueSkillNames = [...new Set(options.skill)];
+    const availableSkills = new Set(selectedNames);
+
+    for (const skillName of uniqueSkillNames) {
+      if (!availableSkills.has(skillName)) {
+        p.log.error(t('skillNotFound', { skillName }));
+        process.exit(1);
+      }
+    }
+
+    selectedNames = uniqueSkillNames;
+  } else if (!options.all) {
     logPromptHelp(t('multiselectPromptHelp'));
     const selection = await promptMultiselect({
       message: t('selectSkillsToInstallIntoProject'),

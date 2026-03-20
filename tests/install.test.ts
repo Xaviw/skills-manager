@@ -1,6 +1,7 @@
 import { mkdir as mkdirMock } from 'fs/promises';
 import * as prompts from '@clack/prompts';
-import { resolve } from 'path';
+import { homedir } from 'os';
+import { isAbsolute, resolve } from 'path';
 import pc from 'picocolors';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as baseDir from '../src/base-dir.js';
@@ -13,6 +14,13 @@ import {
 } from '../src/install.js';
 import * as listPrompt from '../src/list-prompt.js';
 import * as skillLock from '../src/skill-lock.js';
+
+import { stripAnsi } from '../src/test-utils.js';
+
+import {
+  applyEditableTargetDirectoryInput,
+  buildActiveLine,
+} from '../src/install.js';
 
 function dimmedSelectHelp(): string {
   return `${pc.dim(t('selectPromptHelp'))}\n`;
@@ -36,12 +44,16 @@ vi.mock('@clack/prompts', () => ({
   },
 }));
 
-vi.mock('../src/list-prompt.js', () => ({
-  listPromptCancelSymbol: Symbol('list-prompt-cancel'),
-  isListPromptCancel: vi.fn((value) => typeof value === 'symbol'),
-  multiselectListPrompt: vi.fn(),
-  selectListPrompt: vi.fn(),
-}));
+vi.mock('../src/list-prompt.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/list-prompt.js')>();
+  return {
+    ...actual,
+    listPromptCancelSymbol: Symbol('list-prompt-cancel'),
+    isListPromptCancel: vi.fn((value) => typeof value === 'symbol'),
+    multiselectListPrompt: vi.fn(),
+    selectListPrompt: vi.fn(),
+  };
+});
 
 vi.mock('../src/base-dir.js', () => ({
   listBaseSkills: vi.fn(),
@@ -62,10 +74,23 @@ vi.mock('fs/promises', async () => {
   };
 });
 
+function expandExpectedHomeDirectory(targetDir: string): string {
+  if (targetDir === '~') {
+    return homedir();
+  }
+
+  if (targetDir.startsWith('~/') || targetDir.startsWith('~\\')) {
+    return resolve(homedir(), targetDir.slice(2));
+  }
+
+  return targetDir;
+}
+
 function resolveExpectedTargetDir(targetDir: string): string {
-  return targetDir.startsWith('.')
-    ? resolve(process.cwd(), targetDir)
-    : targetDir;
+  const expandedTargetDir = expandExpectedHomeDirectory(targetDir);
+  return isAbsolute(expandedTargetDir)
+    ? expandedTargetDir
+    : resolve(process.cwd(), expandedTargetDir);
 }
 
 describe('install command helpers', () => {
@@ -101,8 +126,21 @@ describe('install command helpers', () => {
   });
 
   it('parses install flags and aliases', () => {
-    const options = parseInstallOptions(['--all', '-d', './out', '--link']);
-    expect(options).toEqual({ all: true, dir: './out', link: true });
+    const options = parseInstallOptions([
+      '-s',
+      'skill-one',
+      'skill-two',
+      '--all',
+      '-d',
+      './out',
+      '--link',
+    ]);
+    expect(options).toEqual({
+      skill: ['skill-one', 'skill-two'],
+      all: true,
+      dir: './out',
+      link: true,
+    });
   });
 
   it('exposes the built-in target directory shortcuts', () => {
@@ -110,6 +148,45 @@ describe('install command helpers', () => {
       { value: '.agents/skills/', label: '.agents/skills/' },
       { value: '.claude/skills/', label: '.claude/skills/' },
     ]);
+  });
+
+  it('moves the editable target directory cursor and inserts at the caret', () => {
+    let state = { value: 'abcd', cursorOffset: 4 };
+
+    state = applyEditableTargetDirectoryInput(state, '', {
+      name: 'left',
+    } as never);
+    state = applyEditableTargetDirectoryInput(state, '', {
+      name: 'left',
+    } as never);
+    state = applyEditableTargetDirectoryInput(state, 'X', {
+      name: 'x',
+    } as never);
+
+    expect(state).toEqual({ value: 'abXcd', cursorOffset: 3 });
+  });
+
+  it('deletes relative to the editable target directory caret', () => {
+    const backspaced = applyEditableTargetDirectoryInput(
+      { value: 'abcd', cursorOffset: 2 },
+      '',
+      { name: 'backspace' } as never,
+    );
+    const deleted = applyEditableTargetDirectoryInput(
+      { value: 'abcd', cursorOffset: 2 },
+      '',
+      { name: 'delete' } as never,
+    );
+
+    expect(backspaced).toEqual({ value: 'acd', cursorOffset: 1 });
+    expect(deleted).toEqual({ value: 'abd', cursorOffset: 2 });
+  });
+
+  it('renders the editable target directory caret at the cursor position', () => {
+    const rendered = buildActiveLine('> ', { value: 'abcd' }, 20, 2);
+
+    expect(stripAnsi(rendered.line)).toBe('> abcd');
+    expect(rendered.cursorColumn).toBe(5);
   });
 
   it('returns the selected directory from the editable prompt', async () => {
@@ -235,6 +312,76 @@ describe('install command helpers', () => {
       expectedInstallCount: 1,
       expectedMode: 'link',
       expectedTargetDir: './out',
+    },
+    {
+      name: '--dir current directory',
+      args: ['--dir', '.'],
+      expectSkillSelection: true,
+      expectDirPrompt: false,
+      expectModePrompt: true,
+      expectedInstallCount: 1,
+      expectedMode: 'copy',
+      expectedTargetDir: '.',
+    },
+    {
+      name: '--dir nested relative path without dot prefix',
+      args: ['--dir', 'custom/skills'],
+      expectSkillSelection: true,
+      expectDirPrompt: false,
+      expectModePrompt: true,
+      expectedInstallCount: 1,
+      expectedMode: 'copy',
+      expectedTargetDir: 'custom/skills',
+    },
+    {
+      name: '--dir parent directory',
+      args: ['--dir', '..'],
+      expectSkillSelection: true,
+      expectDirPrompt: false,
+      expectModePrompt: true,
+      expectedInstallCount: 1,
+      expectedMode: 'copy',
+      expectedTargetDir: '..',
+    },
+    {
+      name: '--dir home shortcut',
+      args: ['--dir', '~/.claude/skills'],
+      expectSkillSelection: true,
+      expectDirPrompt: false,
+      expectModePrompt: true,
+      expectedInstallCount: 1,
+      expectedMode: 'copy',
+      expectedTargetDir: '~/.claude/skills',
+    },
+    {
+      name: '--dir home shortcut with backslashes',
+      args: ['--dir', '~\\.claude\\skills'],
+      expectSkillSelection: true,
+      expectDirPrompt: false,
+      expectModePrompt: true,
+      expectedInstallCount: 1,
+      expectedMode: 'copy',
+      expectedTargetDir: '~\\.claude\\skills',
+    },
+    {
+      name: '--dir bare home shortcut',
+      args: ['--dir', '~'],
+      expectSkillSelection: true,
+      expectDirPrompt: false,
+      expectModePrompt: true,
+      expectedInstallCount: 1,
+      expectedMode: 'copy',
+      expectedTargetDir: '~',
+    },
+    {
+      name: '--dir unsupported user home shorthand',
+      args: ['--dir', '~other/skills'],
+      expectSkillSelection: true,
+      expectDirPrompt: false,
+      expectModePrompt: true,
+      expectedInstallCount: 1,
+      expectedMode: 'copy',
+      expectedTargetDir: '~other/skills',
     },
     {
       name: '--all',
@@ -365,6 +512,86 @@ describe('install command helpers', () => {
     },
   );
 
+  it.runIf(process.platform === 'win32')(
+    'resolves Windows drive and UNC target directories',
+    async () => {
+      await runInstall({ dir: 'C:\\skills-target' });
+      await runInstall({ dir: '\\\\server\\share\\skills' });
+
+      expect(baseDir.installBaseSkillToProject).toHaveBeenNthCalledWith(
+        1,
+        'skill-one',
+        'C:\\skills-target',
+        'copy',
+      );
+      expect(baseDir.installBaseSkillToProject).toHaveBeenNthCalledWith(
+        2,
+        'skill-one',
+        '\\\\server\\share\\skills',
+        'copy',
+      );
+      expect(mkdirMock).toHaveBeenNthCalledWith(1, 'C:\\skills-target', {
+        recursive: true,
+      });
+      expect(mkdirMock).toHaveBeenNthCalledWith(
+        2,
+        '\\\\server\\share\\skills',
+        {
+          recursive: true,
+        },
+      );
+    },
+  );
+
+  it('skips interactive skill selection when named skills are provided', async () => {
+    await runInstall(
+      { skill: ['skill-two', 'skill-one', 'skill-two'] },
+      {
+        promptForTargetDir: vi.fn().mockResolvedValue('.agents/skills/'),
+      },
+    );
+
+    expect(listPrompt.multiselectListPrompt).not.toHaveBeenCalled();
+    expect(baseDir.installBaseSkillToProject).toHaveBeenNthCalledWith(
+      1,
+      'skill-two',
+      resolveExpectedTargetDir('.agents/skills/'),
+      'copy',
+    );
+    expect(baseDir.installBaseSkillToProject).toHaveBeenNthCalledWith(
+      2,
+      'skill-one',
+      resolveExpectedTargetDir('.agents/skills/'),
+      'copy',
+    );
+    expect(baseDir.installBaseSkillToProject).toHaveBeenCalledTimes(2);
+  });
+
+  it('exits with an error when a named skill does not exist', async () => {
+    const exitMock = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((code?: string | number | null) => {
+        throw new Error(`process.exit:${code ?? ''}`);
+      });
+
+    await expect(
+      runInstall(
+        { skill: ['missing-skill'] },
+        {
+          promptForTargetDir: vi.fn().mockResolvedValue('.agents/skills/'),
+        },
+      ),
+    ).rejects.toThrow('process.exit:1');
+
+    expect(prompts.log.error).toHaveBeenCalledWith(
+      t('skillNotFound', { skillName: 'missing-skill' }),
+    );
+    expect(listPrompt.multiselectListPrompt).not.toHaveBeenCalled();
+    expect(mkdirMock).not.toHaveBeenCalled();
+
+    exitMock.mockRestore();
+  });
+
   it('cancels install when target directory selection is cancelled', async () => {
     const exitMock = vi
       .spyOn(process, 'exit')
@@ -403,6 +630,24 @@ describe('install command helpers', () => {
     expect(skillLock.addSavedTargetDirectory).toHaveBeenCalledTimes(1);
     expect(skillLock.addSavedTargetDirectory).toHaveBeenCalledWith(
       './custom/skills',
+    );
+  });
+
+  it('expands a prompted home shortcut but persists the original input', async () => {
+    await runInstall(
+      {},
+      {
+        promptForTargetDir: vi.fn().mockResolvedValue('~/.claude/skills'),
+      },
+    );
+
+    expect(baseDir.installBaseSkillToProject).toHaveBeenCalledWith(
+      'skill-one',
+      resolveExpectedTargetDir('~/.claude/skills'),
+      'copy',
+    );
+    expect(skillLock.addSavedTargetDirectory).toHaveBeenCalledWith(
+      '~/.claude/skills',
     );
   });
 

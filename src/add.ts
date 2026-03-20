@@ -6,11 +6,13 @@ import { cloneRepo, cleanupTempDir } from './git.js';
 import { t } from './i18n.js';
 import { isListPromptCancel, multiselectListPrompt } from './list-prompt.js';
 import { ensureBaseDir, getBaseDir } from './paths.js';
+import { createProgressSpinner } from './progress-spinner.js';
 import { formatPromptHint, showPromptHelp } from './prompt-format.js';
 import { getOwnerRepo, parseSource } from './source-parser.js';
 import { fetchSkillFolderHash, getGitHubToken } from './skill-lock.js';
 import { discoverSkills, filterSkills } from './skills.js';
 import type { Skill } from './types.js';
+import type { ProgressSpinner } from './progress-spinner.js';
 
 export interface AddOptions {
   skill?: string[];
@@ -19,6 +21,18 @@ export interface AddOptions {
 interface ResolvedInstall {
   skill: Skill;
   directoryName: string;
+}
+
+function getMetadataProgressMessage(
+  current: number,
+  total: number,
+  skillName?: string,
+): string {
+  return t('fetchingSkillMetadataProgress', {
+    current,
+    total,
+    skillName: skillName ?? '',
+  });
 }
 
 async function promptForDirectoryName(
@@ -121,14 +135,34 @@ export async function runAdd(
   await ensureBaseDir();
   const parsed = parseSource(sourceInput);
   let tempDir: string | null = null;
+  const shouldRenderProgress = Boolean(process.stdout.isTTY);
 
   try {
-    const sourceDir =
-      parsed.type === 'local'
-        ? parsed.localPath!
-        : ((tempDir = await cloneRepo(parsed.url, parsed.ref)), tempDir);
+    let sourceDir: string;
+    let discoveredSkills: Skill[];
 
-    const discoveredSkills = await discoverSkills(sourceDir, parsed.subpath);
+    if (parsed.type === 'local') {
+      sourceDir = parsed.localPath!;
+      discoveredSkills = await discoverSkills(sourceDir, parsed.subpath);
+    } else {
+      const loadSpinner: ProgressSpinner | null = shouldRenderProgress
+        ? createProgressSpinner()
+        : null;
+      let loadMessage = t('cloningSourceRepository');
+
+      loadSpinner?.start(loadMessage);
+
+      try {
+        tempDir = await cloneRepo(parsed.url, parsed.ref);
+        sourceDir = tempDir;
+        loadMessage = t('discoveringSkillsInSource');
+        loadSpinner?.message(loadMessage);
+        discoveredSkills = await discoverSkills(sourceDir, parsed.subpath);
+      } finally {
+        loadSpinner?.stop(loadMessage);
+      }
+    }
+
     if (discoveredSkills.length === 0) {
       p.log.error(t('noSkillsFoundInSource'));
       process.exit(1);
@@ -183,31 +217,59 @@ export async function runAdd(
     const trackableSource = getOwnerRepo(parsed);
     const normalizedSource = trackableSource ?? parsed.url;
     const token = getGitHubToken();
+    const metadataSpinner: ProgressSpinner | null =
+      shouldRenderProgress && trackableSource && resolvedInstalls.length > 0
+        ? createProgressSpinner()
+        : null;
+    let completedMetadataCount = 0;
 
-    for (const item of resolvedInstalls) {
-      const skillPath = relative(sourceDir, item.skill.path)
-        .split('\\')
-        .join('/');
-      const skillMdRelativePath = skillPath
-        ? `${skillPath}/SKILL.md`
-        : 'SKILL.md';
+    metadataSpinner?.start(
+      getMetadataProgressMessage(0, resolvedInstalls.length),
+    );
 
-      const skillFolderHash = trackableSource
-        ? ((await fetchSkillFolderHash(
-            trackableSource,
-            skillMdRelativePath,
-            token,
-          )) ?? '')
-        : '';
+    try {
+      for (const item of resolvedInstalls) {
+        const skillPath = relative(sourceDir, item.skill.path)
+          .split('\\')
+          .join('/');
+        const skillMdRelativePath = skillPath
+          ? `${skillPath}/SKILL.md`
+          : 'SKILL.md';
 
-      await installSkillToBaseDir(item.skill.path, item.directoryName, {
-        displayName: item.skill.name,
-        source: normalizedSource,
-        sourceType: parsed.type,
-        sourceUrl: parsed.url,
-        skillPath: skillMdRelativePath,
-        skillFolderHash,
-      });
+        metadataSpinner?.message(
+          getMetadataProgressMessage(
+            completedMetadataCount + 1,
+            resolvedInstalls.length,
+            item.skill.name,
+          ),
+        );
+
+        const skillFolderHash = trackableSource
+          ? ((await fetchSkillFolderHash(
+              trackableSource,
+              skillMdRelativePath,
+              token,
+            )) ?? '')
+          : '';
+
+        completedMetadataCount += 1;
+
+        await installSkillToBaseDir(item.skill.path, item.directoryName, {
+          displayName: item.skill.name,
+          source: normalizedSource,
+          sourceType: parsed.type,
+          sourceUrl: parsed.url,
+          skillPath: skillMdRelativePath,
+          skillFolderHash,
+        });
+      }
+    } finally {
+      metadataSpinner?.stop(
+        getMetadataProgressMessage(
+          completedMetadataCount,
+          resolvedInstalls.length,
+        ),
+      );
     }
 
     p.log.success(

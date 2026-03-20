@@ -4,6 +4,7 @@ import { readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { parseAddOptions, runAdd } from './add.js';
+import { runFind } from './find.js';
 import { t } from './i18n.js';
 import { parseInstallOptions, runInstall } from './install.js';
 import { runList } from './list.js';
@@ -37,6 +38,12 @@ async function main(): Promise<void> {
       await runAdd(source, options);
       return;
     }
+    case 'find':
+    case 'search':
+    case 'f':
+    case 's':
+      await runFind(rest);
+      return;
     case 'list':
       await runList();
       return;

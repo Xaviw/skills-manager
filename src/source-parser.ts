@@ -1,3 +1,4 @@
+import { homedir } from 'os';
 import { isAbsolute, resolve } from 'path';
 import { t } from './i18n.js';
 import type { ParsedSource } from './types.js';
@@ -7,6 +8,8 @@ function isLocalPath(input: string): boolean {
 
   return (
     isAbsolute(normalizedInput) ||
+    normalizedInput === '~' ||
+    normalizedInput.startsWith('~/') ||
     normalizedInput.startsWith('./') ||
     normalizedInput.startsWith('../') ||
     normalizedInput === '.' ||
@@ -45,7 +48,7 @@ export function parseSource(input: string): ParsedSource {
   const normalizedInput = input.replace(/\\/g, '/');
 
   if (isLocalPath(normalizedInput)) {
-    const localPath = resolve(normalizedInput);
+    const localPath = resolveLocalPath(normalizedInput);
     return {
       type: 'local',
       url: localPath,
@@ -107,4 +110,16 @@ export function parseSource(input: string): ParsedSource {
     type: 'git',
     url: input,
   };
+}
+
+function resolveLocalPath(input: string): string {
+  if (input === '~') {
+    return homedir();
+  }
+
+  if (input.startsWith('~/')) {
+    return resolve(homedir(), input.slice(2));
+  }
+
+  return resolve(input);
 }

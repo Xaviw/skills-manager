@@ -10,6 +10,7 @@ const enMessages = {
 
 Commands:
   add <source>               Add skills to ~/.config/skls-mgr
+  find [query]               Search remote skills or interactively add one
   list                       List all managed and manual skills
   install                    Install skills to the target directory
   remove [names...]          Interactively or by specified names remove skills
@@ -21,6 +22,7 @@ Add Options:
   -s, --skill <names...>     Install specified skills from the source
 
 Install Options:
+  -s, --skill <names...>     Skip selection and install specified skills
   -a, --all                  Skip selection and install all skills
   -d, --dir <path>           Skip selection and specify the target directory
   -l, --link                 Skip selection and install using symlinks
@@ -65,6 +67,12 @@ General:
   unknownError: 'Unknown error',
   failedToClone: withParams(
     ({ url, message }) => `Failed to clone ${url}: ${message}`,
+  ),
+  cloningSourceRepository: 'Cloning source repository...',
+  discoveringSkillsInSource: 'Discovering skills in source...',
+  fetchingSkillMetadataProgress: withParams(
+    ({ current, total, skillName }) =>
+      `Fetching skill metadata ${current}/${total}${skillName ? `: ${skillName}` : ''}`,
   ),
   attemptedTempDirCleanupOutsideTemp:
     'Attempted to clean up directory outside of temp directory',
@@ -118,6 +126,20 @@ General:
   couldNotLocateSkillInSource: 'Could not locate skill in source',
   updatedSkills: withParams(({ count }) => `Updated ${count} skill(s)`),
   failedUpdates: 'Failed updates:',
+  findQueryPrompt: 'Search query',
+  missingFindQuery: 'Missing search query.',
+  findCancelled: 'Search cancelled.',
+  noSkillsFoundForQuery: withParams(
+    ({ query }) => `No skills found for "${query}".`,
+  ),
+  findInstallWithAdd:
+    'Install with `npx skls-mgr add <source> --skill <skill-name>`',
+  findUrlPrefix: '└ ',
+  findInstallingSkill: withParams(
+    ({ skillName, pkg }) => `Installing ${skillName} from ${pkg}...`,
+  ),
+  findViewSkillAt: withParams(({ url }) => `View the skill at ${url}`),
+  selectSkillToAdd: 'Select a skill to add',
   unsafeSubpath: withParams(
     ({ subpath }) => `Unsafe subpath: "${subpath}" contains ".." segments.`,
   ),
@@ -131,6 +153,7 @@ const zhMessages: Record<TranslationKey, MessageValue> = {
 
 命令:
   add <source>               添加技能到 ~/.config/skls-mgr
+  find [query]               搜索远程技能，或交互式添加
   list                       列出全部托管技能和手动技能
   install                    安装技能到指定目录
   remove [names...]          交互式或根据指定名称删除技能
@@ -142,6 +165,7 @@ const zhMessages: Record<TranslationKey, MessageValue> = {
   -s, --skill <names...>     安装来源中的指定技能
 
 安装选项:
+  -s, --skill <names...>     跳过选择，安装指定技能
   -a, --all                  跳过选择，安装全部技能
   -d, --dir <path>           跳过选择，指定目标目录
   -l, --link                 跳过选择，使用符号链接安装
@@ -184,6 +208,12 @@ const zhMessages: Record<TranslationKey, MessageValue> = {
   unknownError: '未知错误',
   failedToClone: withParams(
     ({ url, message }) => `克隆 ${url} 失败：${message}`,
+  ),
+  cloningSourceRepository: '正在克隆来源仓库...',
+  discoveringSkillsInSource: '正在发现来源中的技能...',
+  fetchingSkillMetadataProgress: withParams(
+    ({ current, total, skillName }) =>
+      `正在获取技能元数据 ${current}/${total}${skillName ? `：${skillName}` : ''}`,
   ),
   attemptedTempDirCleanupOutsideTemp: '尝试清理临时目录之外的目录',
   customPathLabel: '自定义路径...',
@@ -234,6 +264,20 @@ const zhMessages: Record<TranslationKey, MessageValue> = {
   couldNotLocateSkillInSource: '无法在来源中定位该技能',
   updatedSkills: withParams(({ count }) => `已更新 ${count} 个技能`),
   failedUpdates: '更新失败：',
+  findQueryPrompt: '搜索关键词',
+  missingFindQuery: '缺少搜索关键词。',
+  findCancelled: '已取消搜索。',
+  noSkillsFoundForQuery: withParams(
+    ({ query }) => `未找到与 "${query}" 相关的技能。`,
+  ),
+  findInstallWithAdd:
+    '使用 `npx skls-mgr add <source> --skill <skill-name>` 安装',
+  findUrlPrefix: '└ ',
+  findInstallingSkill: withParams(
+    ({ skillName, pkg }) => `正在从 ${pkg} 安装 ${skillName}...`,
+  ),
+  findViewSkillAt: withParams(({ url }) => `技能详情：${url}`),
+  selectSkillToAdd: '选择要添加的技能',
   unsafeSubpath: withParams(
     ({ subpath }) => `不安全的子路径："${subpath}" 包含 ".." 段。`,
   ),

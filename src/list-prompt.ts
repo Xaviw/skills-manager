@@ -42,6 +42,8 @@ const silentOutput = new Writable({
   },
 });
 
+const extendedPictographicPattern = /\p{Extended_Pictographic}/u;
+
 function stripAnsi(value: string): string {
   return stripVTControlCharacters(value);
 }
@@ -72,11 +74,38 @@ function getCodePointWidth(codePoint: number): number {
     return 0;
   }
 
-  if (codePoint <= 0xff) {
-    return 1;
+  // Treat emoji presentation code points as double-width.
+  if (
+    extendedPictographicPattern.test(String.fromCodePoint(codePoint)) ||
+    (codePoint >= 0x1f1e6 && codePoint <= 0x1f1ff)
+  ) {
+    return 2;
   }
 
-  return 2;
+  // Treat known full-width / CJK ranges as double-width.
+  if (
+    codePoint >= 0x1100 &&
+    (codePoint <= 0x115f ||
+      codePoint === 0x2329 ||
+      codePoint === 0x232a ||
+      (codePoint >= 0x2e80 && codePoint <= 0x3247 && codePoint !== 0x303f) ||
+      (codePoint >= 0x3250 && codePoint <= 0x4dbf) ||
+      (codePoint >= 0x4e00 && codePoint <= 0xa4c6) ||
+      (codePoint >= 0xa960 && codePoint <= 0xa97c) ||
+      (codePoint >= 0xac00 && codePoint <= 0xd7a3) ||
+      (codePoint >= 0xf900 && codePoint <= 0xfaff) ||
+      (codePoint >= 0xfe10 && codePoint <= 0xfe19) ||
+      (codePoint >= 0xfe30 && codePoint <= 0xfe6b) ||
+      (codePoint >= 0xff01 && codePoint <= 0xff60) ||
+      (codePoint >= 0xffe0 && codePoint <= 0xffe6) ||
+      (codePoint >= 0x1b000 && codePoint <= 0x1b001) ||
+      (codePoint >= 0x1f200 && codePoint <= 0x1f251) ||
+      (codePoint >= 0x20000 && codePoint <= 0x3fffd))
+  ) {
+    return 2;
+  }
+
+  return 1;
 }
 
 export function measureDisplayWidth(value: string): number {
@@ -274,6 +303,7 @@ async function runListPrompt<Value>(options: {
       if (process.stdin.isTTY) {
         process.stdin.setRawMode(false);
       }
+      process.stdin.pause();
       rl.close();
     };
 

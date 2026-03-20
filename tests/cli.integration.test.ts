@@ -118,7 +118,18 @@ describe('skls-mgr cli integration', () => {
     );
   });
 
-  it('returns a non-zero exit code for unknown commands', async () => {
+  it('routes the find command and reports missing queries in non-interactive mode', () => {
+    const env = { USERPROFILE: homeDir, HOME: homeDir };
+
+    const result = runCli(['find'], projectDir, env);
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stdout + result.stderr).toContain(
+      t('missingFindQuery', {}, locale),
+    );
+  });
+
+  it('returns a non-zero exit code for unknown commands', () => {
     const env = { USERPROFILE: homeDir, HOME: homeDir };
 
     const result = runCli(['unknown-command'], projectDir, env);

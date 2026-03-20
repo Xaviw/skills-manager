@@ -1,15 +1,17 @@
 import { existsSync, rmSync } from 'fs';
 import { mkdir, mkdtemp, readFile, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
-import { join } from 'path';
+import { join, resolve } from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resolveDirectoryName } from '../src/add.js';
-import { installSkillToBaseDir } from '../src/base-dir.js';
+import * as baseDir from '../src/base-dir.js';
 import { resolveCliLocale, t } from '../src/i18n.js';
 import { getBaseDir } from '../src/paths.js';
 import { readSkillLock } from '../src/skill-lock.js';
 import { parseSource } from '../src/source-parser.js';
 import { runUpdate } from '../src/update.js';
+
+const { installSkillToBaseDir } = baseDir;
 
 async function createSkill(
   dir: string,
@@ -52,6 +54,48 @@ describe('core modules', () => {
       type: 'local',
       url: join(process.cwd(), 'skills'),
       localPath: join(process.cwd(), 'skills'),
+    });
+  });
+
+  it('treats standard relative, absolute, and home-shorthand paths as local sources', () => {
+    const cases = [
+      { input: '.', expectedPath: resolve('.') },
+      { input: '..', expectedPath: resolve('..') },
+      { input: process.cwd(), expectedPath: process.cwd() },
+      { input: '~', expectedPath: homeDir },
+      { input: '~/skills', expectedPath: resolve(homeDir, 'skills') },
+      { input: '~\\skills', expectedPath: resolve(homeDir, 'skills') },
+    ];
+
+    for (const { input, expectedPath } of cases) {
+      expect(parseSource(input)).toEqual({
+        type: 'local',
+        url: expectedPath,
+        localPath: expectedPath,
+      });
+    }
+  });
+
+  it.runIf(process.platform === 'win32')(
+    'treats Windows drive and UNC paths as local sources',
+    () => {
+      expect(parseSource('C:\\tmp\\skills')).toEqual({
+        type: 'local',
+        url: 'C:\\tmp\\skills',
+        localPath: 'C:\\tmp\\skills',
+      });
+      expect(parseSource('\\\\server\\share\\skills')).toEqual({
+        type: 'local',
+        url: '\\\\server\\share\\skills',
+        localPath: '\\\\server\\share\\skills',
+      });
+    },
+  );
+
+  it('keeps GitHub owner/repo shorthand distinct from local paths', () => {
+    expect(parseSource('vercel-labs/skills')).toEqual({
+      type: 'github',
+      url: 'https://github.com/vercel-labs/skills.git',
     });
   });
 
@@ -452,7 +496,7 @@ describe('core modules', () => {
     expect(checkSpinner.message).toHaveBeenCalledWith(
       t(
         'checkingSkillUpdatesProgress',
-        { current: 1, total: 1, skillName: 'skill-one' },
+        { current: 1, total: 1, skillName: '' },
         locale,
       ),
     );
@@ -473,7 +517,7 @@ describe('core modules', () => {
     expect(updateSpinner.message).toHaveBeenCalledWith(
       t(
         'updatingSkillsProgress',
-        { current: 1, total: 1, skillName: 'skill-one' },
+        { current: 1, total: 1, skillName: '' },
         locale,
       ),
     );
@@ -542,6 +586,65 @@ describe('core modules', () => {
 
     expect(maxConcurrentRequests).toBe(2);
     expect(logSpy).toHaveBeenCalledWith(t('allSkillsUpToDate', {}, locale));
+
+    rmSync(sourceRepo, { recursive: true, force: true });
+  });
+
+  it('updates skills with fixed concurrency and persists all lock entries', async () => {
+    const sourceRepo = await mkdtemp(join(tmpdir(), 'skls-mgr-source-'));
+
+    for (const [index, skillName] of ['skill-one', 'skill-two'].entries()) {
+      const sourceSkillDir = join(sourceRepo, 'skills', skillName);
+      await createSkill(sourceSkillDir, skillName, `# version ${index + 2}`);
+      await installSkillToBaseDir(sourceSkillDir, skillName, {
+        displayName: skillName,
+        source: 'owner/repo',
+        sourceType: 'github',
+        sourceUrl: sourceRepo,
+        skillPath: `skills/${skillName}/SKILL.md`,
+        skillFolderHash: `old-hash-${index}`,
+      });
+    }
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        sha: 'repo-sha',
+        tree: [
+          { path: 'skills/skill-one', type: 'tree', sha: 'new-hash-one' },
+          { path: 'skills/skill-two', type: 'tree', sha: 'new-hash-two' },
+        ],
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+
+    const originalInstallSkillToBaseDir = baseDir.installSkillToBaseDir;
+    let activeInstalls = 0;
+    let maxConcurrentInstalls = 0;
+    vi.spyOn(baseDir, 'installSkillToBaseDir').mockImplementation(
+      async (...args) => {
+        activeInstalls += 1;
+        maxConcurrentInstalls = Math.max(maxConcurrentInstalls, activeInstalls);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+
+        try {
+          return await originalInstallSkillToBaseDir(...args);
+        } finally {
+          activeInstalls -= 1;
+        }
+      },
+    );
+
+    await runUpdate({
+      skillNames: ['skill-one', 'skill-two'],
+      shouldRenderProgress: false,
+    });
+
+    const lock = await readSkillLock();
+
+    expect(maxConcurrentInstalls).toBe(2);
+    expect(lock.skills['skill-one']?.skillFolderHash).toBe('new-hash-one');
+    expect(lock.skills['skill-two']?.skillFolderHash).toBe('new-hash-two');
 
     rmSync(sourceRepo, { recursive: true, force: true });
   });

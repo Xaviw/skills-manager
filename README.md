@@ -102,18 +102,22 @@ By default, this opens an interactive interface listing all top-level directorie
 
 ### Options
 
-| Option             | Description                                                                                         |
-| ------------------ | --------------------------------------------------------------------------------------------------- |
-| `-a, --all`        | Install all skills. If not specified, allows interactive selection.                                 |
-| `-d, --dir <path>` | Install to the target directory (absolute or relative). If not specified, allows interactive input. |
-| `-l, --link`       | Use symbolic links.                                                                                 |
-| `-c, --copy`       | Use direct copy.                                                                                    |
+| Option                   | Description                                                                                         |
+| ------------------------ | --------------------------------------------------------------------------------------------------- |
+| `-s, --skill <names...>` | Install specified skills directly and skip the interactive selection.                               |
+| `-a, --all`              | Install all skills. If not specified, allows interactive selection.                                 |
+| `-d, --dir <path>`       | Install to the target directory (absolute or relative). If not specified, allows interactive input. |
+| `-l, --link`             | Use symbolic links.                                                                                 |
+| `-c, --copy`             | Use direct copy.                                                                                    |
 
 ### Examples
 
 ```bash
 # Interactive installation to a project
 npx skls-mgr install
+
+# Install specific skills without interactive selection
+npx skls-mgr install --skill skill-one skill-two --dir ./.claude/skills --link
 
 # Copy all skills to the Claude Code skills directory
 npx skls-mgr install --all --dir ./.claude/skills --copy
@@ -134,6 +138,7 @@ When `--link` is selected, if the current environment does not support creating 
 
 | Command                          | Description                                                                                |
 | -------------------------------- | ------------------------------------------------------------------------------------------ |
+| `npx skls-mgr find [query]`      | Search remote skills. Omit the query to search interactively and add a selected skill.     |
 | `npx skls-mgr list`              | List all skills in `~/.config/skls-mgr`, distinguishing between managed and manual skills. |
 | `npx skls-mgr update [names...]` | Interactively or by specified names update skills.                                         |
 | `npx skls-mgr remove [names...]` | Interactively or by specified names remove skills.                                         |
@@ -145,6 +150,12 @@ When `--link` is selected, if the current environment does not support creating 
 ```bash
 # Display all skills (including manually added ones)
 npx skls-mgr list
+
+# Search remote skills by query
+npx skls-mgr find react performance
+
+# Search interactively, then add the selected skill
+npx skls-mgr find
 
 # Interactive update
 npx skls-mgr update
@@ -167,6 +178,21 @@ npx skls-mgr version
 ```
 
 > `skls-mgr update` relies on the GitHub API. To avoid rate limits for anonymous requests (60 per hour), it is recommended to configure `GITHUB_TOKEN` or `GH_TOKEN` in your environment variables to increase the quota (5000 per hour).
+
+## find-skills
+
+It is recommended to use the `find-skills` skill in this project to let your AI help discover useful skills and install them.
+
+```bash
+# Add the skill
+npx skls-mgr add Xaviw/skills-manager --skill find-skills
+
+# Install the skill globally
+npx skls-mgr install --skill find-skills --dir ~/.claude/skills --link
+
+# Or install it into a project on demand
+npx skls-mgr install --skill find-skills --dir ./.claude/skills --link
+```
 
 ## License
 

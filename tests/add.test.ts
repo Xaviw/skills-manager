@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as prompts from '@clack/prompts';
 import * as listPrompt from '../src/list-prompt.js';
 import { parseAddOptions, runAdd } from '../src/add.js';
+import { getBaseDir } from '../src/paths.js';
 
 vi.mock('@clack/prompts', () => ({
   text: vi.fn(),
@@ -111,5 +112,24 @@ describe('add command', () => {
     );
 
     rmSync(sourceRepo, { recursive: true, force: true });
+  });
+
+  it('supports a home-directory source path via ~ shorthand', async () => {
+    const sourceRepo = join(homeDir, 'tilde-source');
+    const skillDir = join(sourceRepo, 'skills', 'agent-browser');
+
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(
+      join(skillDir, 'SKILL.md'),
+      '---\nname: agent-browser\ndescription: Browser automation\n---\n\n# Agent Browser\n',
+      'utf-8',
+    );
+
+    await runAdd('~/tilde-source');
+
+    expect(listPrompt.multiselectListPrompt).toHaveBeenCalledTimes(1);
+    expect(existsSync(join(getBaseDir(), 'agent-browser', 'SKILL.md'))).toBe(
+      true,
+    );
   });
 });
