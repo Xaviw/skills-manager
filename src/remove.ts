@@ -1,10 +1,18 @@
 import * as p from '@clack/prompts';
 import { listBaseSkills, removeBaseSkill } from './base-dir.js';
 import { t } from './i18n.js';
-import { isListPromptCancel, multiselectListPrompt } from './list-prompt.js';
-import { showPromptHelp } from './prompt-format.js';
+import { isPromptCancel, multiselectPrompt } from './prompt.js';
+import { groupBaseSkills } from './skill-groups.js';
 
 export async function runRemove(skillNames: string[] = []): Promise<void> {
+  if (
+    skillNames.length === 0 &&
+    (!process.stdin.isTTY || !process.stdout.isTTY)
+  ) {
+    p.log.error(t('nonInteractiveRemoveRequiresNames'));
+    process.exit(1);
+  }
+
   const skills = await listBaseSkills();
 
   if (skillNames.length > 0) {
@@ -36,25 +44,26 @@ export async function runRemove(skillNames: string[] = []): Promise<void> {
     process.exit(1);
   }
 
-  showPromptHelp(t('multiselectPromptHelp'));
-  const selection = await multiselectListPrompt({
+  const groups = groupBaseSkills(skills);
+  const selection = await multiselectPrompt({
     message: t('selectSkillsToRemove'),
-    options: skills.map((skill) => ({
-      value: skill.directoryName,
-      label: skill.directoryName,
-    })),
-    required: true,
+    options: groups.flatMap((group) =>
+      group.skills.map((skill) => ({
+        value: skill.directoryName,
+        label: skill.directoryName,
+        group: group.label,
+      })),
+    ),
   });
 
-  if (isListPromptCancel(selection)) {
+  if (isPromptCancel(selection)) {
     p.cancel(t('removalCancelled'));
     return;
   }
 
-  const selectedNames = selection as string[];
-  for (const selectedName of selectedNames) {
+  for (const selectedName of selection) {
     await removeBaseSkill(selectedName);
   }
 
-  p.log.success(t('removedSkills', { count: selectedNames.length }));
+  p.log.success(t('removedSkills', { count: selection.length }));
 }

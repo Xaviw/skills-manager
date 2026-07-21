@@ -1,9 +1,8 @@
 import * as prompts from '@clack/prompts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import pc from 'picocolors';
 import * as baseDir from '../src/base-dir.js';
 import { t } from '../src/i18n.js';
-import * as listPrompt from '../src/list-prompt.js';
+import * as prompt from '../src/prompt.js';
 import { runRemove } from '../src/remove.js';
 
 vi.mock('@clack/prompts', () => ({
@@ -15,11 +14,11 @@ vi.mock('@clack/prompts', () => ({
   },
 }));
 
-vi.mock('../src/list-prompt.js', () => ({
-  listPromptCancelSymbol: Symbol('list-prompt-cancel'),
-  isListPromptCancel: vi.fn((value) => typeof value === 'symbol'),
-  multiselectListPrompt: vi.fn(),
-  selectListPrompt: vi.fn(),
+vi.mock('../src/prompt.js', () => ({
+  isPromptCancel: vi.fn(() => false),
+  multiselectPrompt: vi.fn(),
+  selectPrompt: vi.fn(),
+  textPrompt: vi.fn(),
 }));
 
 vi.mock('../src/base-dir.js', () => ({
@@ -29,8 +28,26 @@ vi.mock('../src/base-dir.js', () => ({
 
 describe('remove command', () => {
   const exitError = new Error('process.exit');
+  let originalInputIsTTY: PropertyDescriptor | undefined;
+  let originalOutputIsTTY: PropertyDescriptor | undefined;
 
   beforeEach(() => {
+    originalInputIsTTY = Object.getOwnPropertyDescriptor(
+      process.stdin,
+      'isTTY',
+    );
+    originalOutputIsTTY = Object.getOwnPropertyDescriptor(
+      process.stdout,
+      'isTTY',
+    );
+    Object.defineProperty(process.stdin, 'isTTY', {
+      value: true,
+      configurable: true,
+    });
+    Object.defineProperty(process.stdout, 'isTTY', {
+      value: true,
+      configurable: true,
+    });
     vi.clearAllMocks();
     vi.spyOn(process, 'exit').mockImplementation(((
       code?: string | number | null | undefined,
@@ -41,6 +58,16 @@ describe('remove command', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    if (originalInputIsTTY) {
+      Object.defineProperty(process.stdin, 'isTTY', originalInputIsTTY);
+    } else {
+      Reflect.deleteProperty(process.stdin, 'isTTY');
+    }
+    if (originalOutputIsTTY) {
+      Object.defineProperty(process.stdout, 'isTTY', originalOutputIsTTY);
+    } else {
+      Reflect.deleteProperty(process.stdout, 'isTTY');
+    }
   });
 
   it('removes a named skill without prompting', async () => {
@@ -50,7 +77,7 @@ describe('remove command', () => {
 
     await runRemove(['skill-one']);
 
-    expect(listPrompt.multiselectListPrompt).not.toHaveBeenCalled();
+    expect(prompt.multiselectPrompt).not.toHaveBeenCalled();
     expect(baseDir.removeBaseSkill).toHaveBeenCalledTimes(1);
     expect(baseDir.removeBaseSkill).toHaveBeenCalledWith('skill-one');
     expect(prompts.log.success).toHaveBeenCalledWith(
@@ -60,13 +87,27 @@ describe('remove command', () => {
 
   it('removes multiple named skills without prompting', async () => {
     vi.mocked(baseDir.listBaseSkills).mockResolvedValue([
-      { directoryName: 'skill-one', managed: true, path: '/base/skill-one' },
+      {
+        directoryName: 'skill-one',
+        managed: true,
+        path: '/base/skill-one',
+        lockEntry: {
+          displayName: 'skill-one',
+          source: 'owner/repo',
+          sourceType: 'github',
+          sourceUrl: 'https://github.com/Owner/Repo.git',
+          skillPath: 'skill-one/SKILL.md',
+          skillFolderHash: '',
+          installedAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      },
       { directoryName: 'skill-two', managed: false, path: '/base/skill-two' },
     ] as never);
 
     await runRemove(['skill-one', 'skill-two']);
 
-    expect(listPrompt.multiselectListPrompt).not.toHaveBeenCalled();
+    expect(prompt.multiselectPrompt).not.toHaveBeenCalled();
     expect(baseDir.removeBaseSkill).toHaveBeenCalledTimes(2);
     expect(baseDir.removeBaseSkill).toHaveBeenNthCalledWith(1, 'skill-one');
     expect(baseDir.removeBaseSkill).toHaveBeenNthCalledWith(2, 'skill-two');
@@ -77,26 +118,36 @@ describe('remove command', () => {
 
   it('opens a multiselect with no default selection when no name is provided', async () => {
     vi.mocked(baseDir.listBaseSkills).mockResolvedValue([
-      { directoryName: 'skill-one', managed: true, path: '/base/skill-one' },
+      {
+        directoryName: 'skill-one',
+        managed: true,
+        path: '/base/skill-one',
+        lockEntry: {
+          displayName: 'skill-one',
+          source: 'owner/repo',
+          sourceType: 'github',
+          sourceUrl: 'https://github.com/Owner/Repo.git',
+          skillPath: 'skill-one/SKILL.md',
+          skillFolderHash: '',
+          installedAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      },
       { directoryName: 'skill-two', managed: false, path: '/base/skill-two' },
     ] as never);
-    vi.mocked(listPrompt.multiselectListPrompt).mockResolvedValue([
+    vi.mocked(prompt.multiselectPrompt).mockResolvedValue([
       'skill-one',
       'skill-two',
     ]);
 
     await runRemove();
 
-    expect(prompts.log.message).toHaveBeenCalledWith(
-      `${pc.dim(t('multiselectPromptHelp'))}\n`,
-    );
-    expect(listPrompt.multiselectListPrompt).toHaveBeenCalledWith({
+    expect(prompt.multiselectPrompt).toHaveBeenCalledWith({
       message: t('selectSkillsToRemove'),
       options: [
-        { value: 'skill-one', label: 'skill-one' },
-        { value: 'skill-two', label: 'skill-two' },
+        { value: 'skill-two', label: 'skill-two', group: t('manualSkills') },
+        { value: 'skill-one', label: 'skill-one', group: 'owner/repo' },
       ],
-      required: true,
     });
     expect(baseDir.removeBaseSkill).toHaveBeenCalledTimes(2);
     expect(baseDir.removeBaseSkill).toHaveBeenNthCalledWith(1, 'skill-one');
@@ -110,10 +161,10 @@ describe('remove command', () => {
     vi.mocked(baseDir.listBaseSkills).mockResolvedValue([
       { directoryName: 'skill-one', managed: true, path: '/base/skill-one' },
     ] as never);
-    vi.mocked(listPrompt.multiselectListPrompt).mockResolvedValue(
-      listPrompt.listPromptCancelSymbol as never,
+    vi.mocked(prompt.multiselectPrompt).mockResolvedValue(
+      Symbol('cancel') as prompt.PromptCancel,
     );
-    vi.mocked(listPrompt.isListPromptCancel).mockReturnValue(true);
+    vi.mocked(prompt.isPromptCancel).mockReturnValue(true);
 
     await runRemove();
 

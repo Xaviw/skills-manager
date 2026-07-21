@@ -1,15 +1,15 @@
 import { existsSync, rmSync } from 'fs';
-import { mkdir, mkdtemp, writeFile } from 'fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as prompts from '@clack/prompts';
-import * as listPrompt from '../src/list-prompt.js';
+import * as prompt from '../src/prompt.js';
 import { parseAddOptions, runAdd } from '../src/add.js';
 import { getBaseDir } from '../src/paths.js';
+import { t } from '../src/i18n.js';
 
 vi.mock('@clack/prompts', () => ({
-  text: vi.fn(),
   cancel: vi.fn(),
   log: {
     error: vi.fn(),
@@ -18,11 +18,11 @@ vi.mock('@clack/prompts', () => ({
   },
 }));
 
-vi.mock('../src/list-prompt.js', () => ({
-  listPromptCancelSymbol: Symbol('list-prompt-cancel'),
-  isListPromptCancel: vi.fn((value) => typeof value === 'symbol'),
-  multiselectListPrompt: vi.fn(),
-  selectListPrompt: vi.fn(),
+vi.mock('../src/prompt.js', () => ({
+  isPromptCancel: vi.fn(() => false),
+  multiselectPrompt: vi.fn(),
+  selectPrompt: vi.fn(),
+  textPrompt: vi.fn(),
 }));
 
 describe('add command helpers', () => {
@@ -59,28 +59,56 @@ describe('add command helpers', () => {
 describe('add command', () => {
   let homeDir: string;
   let originalHome: string | undefined;
+  let originalInputIsTTY: PropertyDescriptor | undefined;
+  let originalOutputIsTTY: PropertyDescriptor | undefined;
 
   beforeEach(async () => {
     homeDir = await mkdtemp(join(tmpdir(), 'skls-mgr-home-'));
     originalHome = process.env.USERPROFILE;
+    originalInputIsTTY = Object.getOwnPropertyDescriptor(
+      process.stdin,
+      'isTTY',
+    );
+    originalOutputIsTTY = Object.getOwnPropertyDescriptor(
+      process.stdout,
+      'isTTY',
+    );
     process.env.USERPROFILE = homeDir;
     process.env.HOME = homeDir;
-    vi.mocked(listPrompt.multiselectListPrompt).mockReset();
-    vi.mocked(listPrompt.multiselectListPrompt).mockResolvedValue([
-      'agent-browser',
+    Object.defineProperty(process.stdin, 'isTTY', {
+      value: true,
+      configurable: true,
+    });
+    Object.defineProperty(process.stdout, 'isTTY', {
+      value: true,
+      configurable: true,
+    });
+    vi.mocked(prompt.multiselectPrompt).mockReset();
+    vi.mocked(prompt.multiselectPrompt).mockResolvedValue([
+      'skills/agent-browser/SKILL.md',
     ]);
   });
 
   afterEach(() => {
     process.env.USERPROFILE = originalHome;
     process.env.HOME = originalHome;
+    if (originalInputIsTTY) {
+      Object.defineProperty(process.stdin, 'isTTY', originalInputIsTTY);
+    } else {
+      Reflect.deleteProperty(process.stdin, 'isTTY');
+    }
+    if (originalOutputIsTTY) {
+      Object.defineProperty(process.stdout, 'isTTY', originalOutputIsTTY);
+    } else {
+      Reflect.deleteProperty(process.stdout, 'isTTY');
+    }
     vi.restoreAllMocks();
     if (homeDir && existsSync(homeDir)) {
       rmSync(homeDir, { recursive: true, force: true });
     }
   });
 
-  it('keeps the skill name intact and sanitizes long multiline hints for the picker', async () => {
+  it('passes skill identity and description to the picker', async () => {
     const sourceRepo = await mkdtemp(join(tmpdir(), 'skls-mgr-source-'));
     const skillDir = join(sourceRepo, 'skills', 'agent-browser');
     const description = [
@@ -98,19 +126,64 @@ describe('add command', () => {
 
     await runAdd(sourceRepo);
 
-    expect(prompts.log.message).toHaveBeenCalled();
-    expect(listPrompt.multiselectListPrompt).toHaveBeenCalledTimes(1);
-    const [call] = vi.mocked(listPrompt.multiselectListPrompt).mock.calls;
+    expect(prompt.multiselectPrompt).toHaveBeenCalledTimes(1);
+    const [call] = vi.mocked(prompt.multiselectPrompt).mock.calls;
     const option = call?.[0].options[0];
-    expect(option?.value).toBe('agent-browser');
+    expect(option?.value).toBe('skills/agent-browser/SKILL.md');
     expect(option?.label).toBe('agent-browser');
-    expect(option?.hint).toContain('Browser automation');
-    expect(option?.hint).toContain('...');
-    expect(option?.hint).not.toContain('\n');
-    expect(option?.hint?.length).toBeLessThan(
-      description.replace(/\s+/g, ' ').trim().length,
-    );
+    expect(option?.hint).toBe(`${description} - skills/agent-browser/SKILL.md`);
 
+    rmSync(sourceRepo, { recursive: true, force: true });
+  });
+
+  it('lists source skills in natural display-name order', async () => {
+    const sourceRepo = await mkdtemp(join(tmpdir(), 'skls-mgr-source-'));
+    for (const [directory, name] of [
+      ['a', 'skill-10'],
+      ['b', 'skill-2'],
+      ['z', 'Alpha'],
+    ] as const) {
+      const skillDir = join(sourceRepo, directory);
+      await mkdir(skillDir, { recursive: true });
+      await writeFile(
+        join(skillDir, 'SKILL.md'),
+        `---\nname: ${name}\ndescription: ${name}\n---\n`,
+        'utf-8',
+      );
+    }
+    vi.mocked(prompt.multiselectPrompt).mockResolvedValue([]);
+
+    await runAdd(sourceRepo);
+
+    const [call] = vi.mocked(prompt.multiselectPrompt).mock.calls;
+    expect(call?.[0].options.map((option) => option.label)).toEqual([
+      'Alpha',
+      'skill-2',
+      'skill-10',
+    ]);
+    rmSync(sourceRepo, { recursive: true, force: true });
+  });
+
+  it('uses skillPath as the stable tie-break for equal display names', async () => {
+    const sourceRepo = await mkdtemp(join(tmpdir(), 'skls-mgr-source-'));
+    for (const directory of ['z', 'a']) {
+      const skillDir = join(sourceRepo, directory);
+      await mkdir(skillDir, { recursive: true });
+      await writeFile(
+        join(skillDir, 'SKILL.md'),
+        '---\nname: shared\ndescription: shared\n---\n',
+        'utf-8',
+      );
+    }
+    vi.mocked(prompt.multiselectPrompt).mockResolvedValue([]);
+
+    await runAdd(sourceRepo);
+
+    const [call] = vi.mocked(prompt.multiselectPrompt).mock.calls;
+    expect(call?.[0].options.map((option) => option.value)).toEqual([
+      'a/SKILL.md',
+      'z/SKILL.md',
+    ]);
     rmSync(sourceRepo, { recursive: true, force: true });
   });
 
@@ -127,9 +200,61 @@ describe('add command', () => {
 
     await runAdd('~/tilde-source');
 
-    expect(listPrompt.multiselectListPrompt).toHaveBeenCalledTimes(1);
+    expect(prompt.multiselectPrompt).toHaveBeenCalledTimes(1);
     expect(existsSync(join(getBaseDir(), 'agent-browser', 'SKILL.md'))).toBe(
       true,
     );
+  });
+
+  it('reuses the existing directory for the same Managed Skill Identity', async () => {
+    const sourceRepo = await mkdtemp(join(tmpdir(), 'skls-mgr-source-'));
+    const skillDir = join(sourceRepo, 'skills', 'shared');
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(
+      join(skillDir, 'SKILL.md'),
+      '---\nname: old-name\ndescription: old\n---\n',
+      'utf-8',
+    );
+    await runAdd(sourceRepo, { skill: ['old-name'] });
+
+    await writeFile(
+      join(skillDir, 'SKILL.md'),
+      '---\nname: new-name\ndescription: new\n---\n',
+      'utf-8',
+    );
+    await runAdd(sourceRepo, { skill: ['new-name'] });
+
+    expect(
+      await readFile(join(getBaseDir(), 'old-name', 'SKILL.md'), 'utf-8'),
+    ).toContain('name: new-name');
+    expect(existsSync(join(getBaseDir(), 'new-name'))).toBe(false);
+    rmSync(sourceRepo, { recursive: true, force: true });
+  });
+
+  it('returns normally when directory conflict input is cancelled', async () => {
+    const sourceRepo = join(homeDir, 'source');
+    const skillDir = join(sourceRepo, 'agent-browser');
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(
+      join(skillDir, 'SKILL.md'),
+      '---\nname: agent-browser\ndescription: Browser automation\n---\n',
+      'utf-8',
+    );
+    await mkdir(join(getBaseDir(), 'agent-browser'), { recursive: true });
+    vi.mocked(prompt.multiselectPrompt).mockResolvedValue([
+      'agent-browser/SKILL.md',
+    ]);
+    vi.mocked(prompt.textPrompt).mockResolvedValue('cancel');
+    vi.mocked(prompt.isPromptCancel).mockImplementation(
+      (value) => value === 'cancel',
+    );
+    const exit = vi.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('process.exit');
+    }) as never);
+
+    await expect(runAdd(sourceRepo)).resolves.toBeUndefined();
+
+    expect(prompts.cancel).toHaveBeenCalledWith(t('installationCancelled'));
+    expect(exit).not.toHaveBeenCalled();
   });
 });

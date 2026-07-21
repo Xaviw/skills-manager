@@ -1,6 +1,6 @@
 {
   "name": "skls-mgr",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Agent skills manager: Centralized maintenance, on-demand installation, and automatic synchronization.",
   "license": "MIT",
   "author": "xavi",
@@ -17,8 +17,8 @@
     "dev": "node --import tsx src/cli.ts",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "format": "prettier . --write --ignore-path .gitignore",
-    "format:check": "prettier . --check --ignore-path .gitignore",
+    "format": "prettier . --write --ignore-path .gitignore --ignore-path .prettierignore",
+    "format:check": "prettier . --check --ignore-path .gitignore --ignore-path .prettierignore",
     "check": "lint-staged",
     "check:all": "pnpm lint && pnpm format:check && pnpm type-check",
     "test": "vitest run",
@@ -51,7 +51,7 @@
   },
   "lint-staged": {
     "*.{js,cjs,mjs,jsx,ts,cts,mts,tsx}": "eslint",
-    "*": "prettier --check --ignore-path .gitignore --ignore-unknown"
+    "*": "prettier --check --ignore-path .gitignore --ignore-path .prettierignore --ignore-unknown"
   },
   "dependencies": {
     "@clack/prompts": "^0.11.0",

@@ -1,8 +1,16 @@
-import { readdir, readFile, stat } from 'fs/promises';
-import { dirname, join, normalize, resolve, sep } from 'path';
+import { lstat, readdir, readFile, realpath, stat } from 'fs/promises';
+import {
+  dirname,
+  isAbsolute,
+  join,
+  normalize,
+  relative,
+  resolve,
+  sep,
+} from 'path';
 import matter from 'gray-matter';
 import { t } from './i18n.js';
-import type { Skill } from './types.js';
+import type { Skill, SourceIssue } from './types.js';
 
 const SKIP_DIRS = new Set([
   'node_modules',
@@ -21,7 +29,7 @@ async function hasSkillMd(dir: string): Promise<boolean> {
   }
 }
 
-export function isSubpathSafe(basePath: string, subpath: string): boolean {
+function isSubpathSafe(basePath: string, subpath: string): boolean {
   const normalizedBase = normalize(resolve(basePath));
   const normalizedTarget = normalize(resolve(join(basePath, subpath)));
   return (
@@ -30,114 +38,124 @@ export function isSubpathSafe(basePath: string, subpath: string): boolean {
   );
 }
 
-export async function parseSkillMd(skillMdPath: string): Promise<Skill | null> {
+function isRealPathContained(basePath: string, targetPath: string): boolean {
+  const relativePath = relative(basePath, targetPath);
+  return (
+    relativePath === '' ||
+    (!relativePath.startsWith(`..${sep}`) &&
+      relativePath !== '..' &&
+      !isAbsolute(relativePath))
+  );
+}
+
+async function readSkillMd(skillMdPath: string): Promise<{
+  skill: Skill | null;
+  issue?: SourceIssue['code'];
+}> {
+  let rawContent: string;
   try {
-    const rawContent = await readFile(skillMdPath, 'utf-8');
+    rawContent = await readFile(skillMdPath, 'utf-8');
+  } catch {
+    return { skill: null, issue: 'unreadable-skill' };
+  }
+
+  try {
     const { data } = matter(rawContent);
-    if (typeof data.name !== 'string' || typeof data.description !== 'string') {
-      return null;
+    if (
+      typeof data.name !== 'string' ||
+      typeof data.description !== 'string' ||
+      !data.name.trim() ||
+      !data.description.trim()
+    ) {
+      return { skill: null, issue: 'invalid-skill' };
     }
 
     return {
-      name: data.name,
-      description: data.description,
-      path: dirname(skillMdPath),
+      skill: {
+        name: data.name.trim(),
+        description: data.description.trim(),
+        path: dirname(skillMdPath),
+      },
     };
   } catch {
-    return null;
+    return { skill: null, issue: 'invalid-skill' };
   }
 }
 
-async function findSkillDirs(
-  dir: string,
-  depth = 0,
-  maxDepth = 5,
-): Promise<string[]> {
-  if (depth > maxDepth) {
-    return [];
-  }
-
+async function findSkillDirs(dir: string): Promise<string[]> {
   const currentDir = (await hasSkillMd(dir)) ? [dir] : [];
 
-  try {
-    const entries = await readdir(dir, {
-      encoding: 'utf8',
-      withFileTypes: true,
-    });
-    const nested = await Promise.all(
-      entries
-        .filter((entry) => entry.isDirectory() && !SKIP_DIRS.has(entry.name))
-        .map((entry) =>
-          findSkillDirs(join(dir, entry.name), depth + 1, maxDepth),
-        ),
-    );
+  const entries = await readdir(dir, {
+    encoding: 'utf8',
+    withFileTypes: true,
+  });
+  const nested = await Promise.all(
+    entries
+      .filter((entry) => entry.isDirectory() && !SKIP_DIRS.has(entry.name))
+      .map((entry) => findSkillDirs(join(dir, entry.name))),
+  );
 
-    return [...currentDir, ...nested.flat()];
-  } catch {
-    return currentDir;
-  }
+  return [...currentDir, ...nested.flat()];
 }
 
-export async function discoverSkills(
+export async function inspectSkills(
   basePath: string,
   subpath?: string,
-): Promise<Skill[]> {
+): Promise<{
+  skills: Skill[];
+  issues: Array<{ directory: string; code: SourceIssue['code'] }>;
+}> {
   if (subpath && !isSubpathSafe(basePath, subpath)) {
     throw new Error(t('invalidSubpath'));
   }
 
   const searchPath = subpath ? join(basePath, subpath) : basePath;
   const skills: Skill[] = [];
-  const seen = new Set<string>();
-
-  if (await hasSkillMd(searchPath)) {
-    const skill = await parseSkillMd(join(searchPath, 'SKILL.md'));
-    if (skill) {
-      skills.push(skill);
-      seen.add(skill.name);
-    }
+  const issues: Array<{ directory: string; code: SourceIssue['code'] }> = [];
+  const [realBasePath, realSearchPath, searchPathStats] = await Promise.all([
+    realpath(basePath),
+    realpath(searchPath),
+    lstat(searchPath),
+  ]);
+  if (
+    !isRealPathContained(realBasePath, realSearchPath) ||
+    (subpath && searchPathStats.isSymbolicLink())
+  ) {
+    throw new Error(t('invalidSubpath'));
   }
 
-  const priorityDirs = [searchPath, join(searchPath, 'skills')];
-  for (const dir of priorityDirs) {
+  const recursiveDirs = await findSkillDirs(searchPath);
+  for (const dir of recursiveDirs) {
+    const skillMdPath = join(dir, 'SKILL.md');
     try {
-      const entries = await readdir(dir, {
-        encoding: 'utf8',
-        withFileTypes: true,
-      });
-      for (const entry of entries) {
-        if (!entry.isDirectory()) {
-          continue;
-        }
-
-        const skill = await parseSkillMd(join(dir, entry.name, 'SKILL.md'));
-        if (skill && !seen.has(skill.name)) {
-          skills.push(skill);
-          seen.add(skill.name);
-        }
+      const [realDirectory, realSkillMdPath, skillMdStats] = await Promise.all([
+        realpath(dir),
+        realpath(skillMdPath),
+        lstat(skillMdPath),
+      ]);
+      const isContained = [realDirectory, realSkillMdPath].every((path) =>
+        isRealPathContained(realBasePath, path),
+      );
+      if (!isContained) {
+        issues.push({ directory: dir, code: 'outside-source' });
+        continue;
+      }
+      if (!skillMdStats.isFile()) {
+        issues.push({ directory: dir, code: 'invalid-skill' });
+        continue;
       }
     } catch {
+      issues.push({ directory: dir, code: 'unreadable-skill' });
       continue;
     }
-  }
 
-  if (skills.length === 0) {
-    const recursiveDirs = await findSkillDirs(searchPath);
-    for (const dir of recursiveDirs) {
-      const skill = await parseSkillMd(join(dir, 'SKILL.md'));
-      if (skill && !seen.has(skill.name)) {
-        skills.push(skill);
-        seen.add(skill.name);
-      }
+    const result = await readSkillMd(skillMdPath);
+    if (result.skill) {
+      skills.push(result.skill);
+    } else if (result.issue) {
+      issues.push({ directory: dir, code: result.issue });
     }
   }
 
-  return skills;
-}
-
-export function filterSkills(skills: Skill[], inputNames: string[]): Skill[] {
-  const normalizedInputs = inputNames.map((name) => name.toLowerCase());
-  return skills.filter((skill) =>
-    normalizedInputs.includes(skill.name.toLowerCase()),
-  );
+  return { skills, issues };
 }

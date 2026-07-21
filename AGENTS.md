@@ -107,3 +107,13 @@ pnpm check
 - 默认使用中文回复用户。
 - 修改代码时，说明应聚焦结果、风险、验证情况，不写空泛总结。
 - 如果用户要求评审，优先给出问题列表、风险等级和定位，再给摘要。
+
+## Agent skills
+
+### Issue tracker
+
+Issue 使用 `.scratch/<feature>/` 下的本地 Markdown 文件管理。详见 `docs/agents/issue-tracker.md`。
+
+### Domain docs
+
+采用 single-context 布局：根目录使用 `CONTEXT.md`，架构决策存放于 `docs/adr/`。详见 `docs/agents/domain.md`。

@@ -1,40 +1,45 @@
 import { existsSync, rmSync } from 'fs';
+import * as fsPromises from 'fs/promises';
 import { dirname, join } from 'path';
 import { mkdir, mkdtemp, readFile, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CURRENT_LOCK_VERSION } from '../src/constants.js';
 import {
   addSkillToLock,
-  fetchSkillFolderHash,
-  getGitHubToken,
   readSkillLock,
   removeSkillFromLock,
   writeSkillLock,
 } from '../src/skill-lock.js';
 import { getLockFilePath } from '../src/paths.js';
 
+vi.mock('fs/promises', async () => {
+  const actual =
+    await vi.importActual<typeof import('fs/promises')>('fs/promises');
+  return {
+    ...actual,
+    rename: vi.fn(actual.rename),
+  };
+});
+
 describe('skill lock core behavior', () => {
   let homeDir: string;
   let previousHome: string | undefined;
   let previousUserProfile: string | undefined;
-  let previousGithubToken: string | undefined;
-  let previousGhToken: string | undefined;
 
   beforeEach(async () => {
+    const actualFs =
+      await vi.importActual<typeof import('fs/promises')>('fs/promises');
+    vi.mocked(fsPromises.rename).mockImplementation(actualFs.rename);
     homeDir = await mkdtemp(join(tmpdir(), 'skls-mgr-home-'));
     previousHome = process.env.HOME;
     previousUserProfile = process.env.USERPROFILE;
-    previousGithubToken = process.env.GITHUB_TOKEN;
-    previousGhToken = process.env.GH_TOKEN;
-
     process.env.HOME = homeDir;
     process.env.USERPROFILE = homeDir;
-    delete process.env.GITHUB_TOKEN;
-    delete process.env.GH_TOKEN;
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     if (previousHome === undefined) {
       delete process.env.HOME;
     } else {
@@ -45,18 +50,6 @@ describe('skill lock core behavior', () => {
       delete process.env.USERPROFILE;
     } else {
       process.env.USERPROFILE = previousUserProfile;
-    }
-
-    if (previousGithubToken === undefined) {
-      delete process.env.GITHUB_TOKEN;
-    } else {
-      process.env.GITHUB_TOKEN = previousGithubToken;
-    }
-
-    if (previousGhToken === undefined) {
-      delete process.env.GH_TOKEN;
-    } else {
-      process.env.GH_TOKEN = previousGhToken;
     }
 
     if (homeDir && existsSync(homeDir)) {
@@ -126,6 +119,28 @@ describe('skill lock core behavior', () => {
     );
   });
 
+  it('keeps the previous lock when atomic replacement fails', async () => {
+    await writeSkillLock({
+      version: CURRENT_LOCK_VERSION,
+      skills: {},
+      targetDirectories: ['./old'],
+    });
+    const previousContent = await readFile(getLockFilePath(), 'utf-8');
+
+    vi.mocked(fsPromises.rename).mockRejectedValueOnce(
+      new Error('rename failed'),
+    );
+
+    await expect(
+      writeSkillLock({
+        version: CURRENT_LOCK_VERSION,
+        skills: {},
+        targetDirectories: ['./new'],
+      }),
+    ).rejects.toThrow('rename failed');
+    expect(await readFile(getLockFilePath(), 'utf-8')).toBe(previousContent);
+  });
+
   it('preserves installedAt when updating a lock entry and removes tracked skills', async () => {
     await addSkillToLock('skill-one', {
       displayName: 'skill-one',
@@ -161,68 +176,5 @@ describe('skill lock core behavior', () => {
     expect(await removeSkillFromLock('missing-skill')).toBe(false);
     expect(await removeSkillFromLock('skill-one')).toBe(true);
     expect((await readSkillLock()).skills['skill-one']).toBeUndefined();
-  });
-
-  it('prefers explicit GitHub tokens from the environment', () => {
-    process.env.GH_TOKEN = 'gh-token';
-    process.env.GITHUB_TOKEN = 'github-token';
-    expect(getGitHubToken()).toBe('github-token');
-
-    delete process.env.GITHUB_TOKEN;
-    expect(getGitHubToken()).toBe('gh-token');
-  });
-
-  it('returns the repository SHA for root-level skills', async () => {
-    const fetchMock = async () =>
-      ({
-        ok: true,
-        json: async () => ({
-          sha: 'repo-sha',
-          tree: [],
-        }),
-      }) as Response;
-
-    await expect(
-      fetchSkillFolderHash(
-        'owner/repo',
-        'SKILL.md',
-        null,
-        fetchMock as typeof fetch,
-      ),
-    ).resolves.toBe('repo-sha');
-  });
-
-  it('falls back from main to master when resolving folder hashes', async () => {
-    const fetchCalls: string[] = [];
-    const fetchMock = async (url: string) => {
-      fetchCalls.push(url);
-      if (url.includes('/main?')) {
-        return {
-          ok: false,
-          json: async () => ({}),
-        } as Response;
-      }
-
-      return {
-        ok: true,
-        json: async () => ({
-          sha: 'repo-sha',
-          tree: [{ path: 'skills/skill-one', type: 'tree', sha: 'folder-sha' }],
-        }),
-      } as Response;
-    };
-
-    await expect(
-      fetchSkillFolderHash(
-        'owner/repo',
-        'skills\\skill-one\\SKILL.md',
-        'token',
-        fetchMock as typeof fetch,
-      ),
-    ).resolves.toBe('folder-sha');
-
-    expect(fetchCalls).toHaveLength(2);
-    expect(fetchCalls[0]).toContain('/main?recursive=1');
-    expect(fetchCalls[1]).toContain('/master?recursive=1');
   });
 });

@@ -1,8 +1,8 @@
 import * as p from '@clack/prompts';
 import { parseAddOptions, runAdd } from './add.js';
 import { t } from './i18n.js';
-import { isListPromptCancel, selectListPrompt } from './list-prompt.js';
-import { formatPromptHint, showPromptHelp } from './prompt-format.js';
+import { isPromptCancel, selectPrompt, textPrompt } from './prompt.js';
+import type { PromptCancel } from './prompt.js';
 
 const DEFAULT_FIND_LIMIT = 10;
 const DEFAULT_RESULTS_TO_PRINT = 6;
@@ -118,8 +118,8 @@ function buildResultUrl(result: FindSkillResult): string {
   return `${getFindSiteBase()}/${result.slug}`;
 }
 
-async function promptForFindQuery(): Promise<string | symbol> {
-  return p.text({
+async function promptForFindQuery(): Promise<string | PromptCancel> {
+  return textPrompt({
     message: t('findQueryPrompt'),
     placeholder: 'react performance',
     validate(value) {
@@ -168,11 +168,8 @@ export async function runFind(
   args: string[],
   options: {
     searchSkillsImpl?: typeof searchSkills;
-    promptForQuery?: () => Promise<string | symbol>;
-    promptSelect?: typeof selectListPrompt;
     runAddImpl?: typeof runAdd;
     isInteractive?: boolean;
-    logPromptHelp?: (helpText: string) => void;
     log?: (message: string) => void;
   } = {},
 ): Promise<void> {
@@ -190,8 +187,8 @@ export async function runFind(
       process.exit(1);
     }
 
-    const input = await (options.promptForQuery ?? promptForFindQuery)();
-    if (p.isCancel(input)) {
+    const input = await promptForFindQuery();
+    if (isPromptCancel(input)) {
       p.cancel(t('findCancelled'));
       return;
     }
@@ -221,8 +218,7 @@ export async function runFind(
     return;
   }
 
-  (options.logPromptHelp ?? showPromptHelp)(t('selectPromptHelp'));
-  const selection = await (options.promptSelect ?? selectListPrompt)({
+  const selection = await selectPrompt({
     message: t('selectSkillToAdd'),
     options: results.map((result) => {
       const installs = formatInstallCount(result.installs);
@@ -232,13 +228,13 @@ export async function runFind(
       return {
         value: `${result.slug}::${result.name}`,
         label: result.name,
-        hint: formatPromptHint(hint),
+        hint,
       };
     }),
     initialValue: `${results[0]!.slug}::${results[0]!.name}`,
   });
 
-  if (isListPromptCancel(selection)) {
+  if (isPromptCancel(selection)) {
     p.cancel(t('findCancelled'));
     return;
   }

@@ -69,7 +69,7 @@ describe('skls-mgr cli integration', () => {
     await createSkill(join(baseDir, 'manual-skill'), 'manual-skill', 'manual');
 
     const listResult = runCli(['list'], projectDir, env);
-    expect(listResult.stdout).toContain(t('managedSkills', {}, locale));
+    expect(listResult.stdout).toContain(repoDir);
     expect(listResult.stdout).toContain('skill-one');
     expect(listResult.stdout).toContain(t('manualSkills', {}, locale));
     expect(listResult.stdout).toContain('manual-skill');
@@ -126,6 +126,29 @@ describe('skls-mgr cli integration', () => {
     expect(result.exitCode).not.toBe(0);
     expect(result.stdout + result.stderr).toContain(
       t('missingFindQuery', {}, locale),
+    );
+  });
+
+  it('requires explicit arguments for interactive commands in non-interactive mode', async () => {
+    const env = { USERPROFILE: homeDir, HOME: homeDir };
+    const baseDir = join(homeDir, '.config', 'skls-mgr');
+    await createSkill(join(baseDir, 'skill-one'), 'skill-one');
+
+    const addResult = runCli(['add', repoDir], projectDir, env);
+    const installResult = runCli(['install'], projectDir, env);
+    const removeResult = runCli(['remove'], projectDir, env);
+
+    expect(addResult.exitCode).not.toBe(0);
+    expect(addResult.stdout + addResult.stderr).toContain(
+      t('nonInteractiveAddRequiresSkill', {}, locale),
+    );
+    expect(installResult.exitCode).not.toBe(0);
+    expect(installResult.stdout + installResult.stderr).toContain(
+      t('nonInteractiveInstallRequiresOptions', {}, locale),
+    );
+    expect(removeResult.exitCode).not.toBe(0);
+    expect(removeResult.stdout + removeResult.stderr).toContain(
+      t('nonInteractiveRemoveRequiresNames', {}, locale),
     );
   });
 

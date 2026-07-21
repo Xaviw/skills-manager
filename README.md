@@ -49,7 +49,7 @@ npx skls-mgr add <source>
 
 ```
 
-By default, this opens an interactive interface listing all available skills from the source.
+By default, this opens an interactive interface listing all available skills from the source in natural, case-insensitive name order.
 
 ### Options
 
@@ -86,10 +86,14 @@ npx skls-mgr add vercel-labs/agent-skills --skill frontend-design skill-creator
 
 ### Conflict Resolution
 
-If the directory name of the skill being installed conflicts with an existing top-level directory in `~/.config/skls-mgr`:
+Re-adding a managed skill from the same repository and the same skill path within that repository overwrites its existing directory while preserving the directory name.
+
+For other directory-name conflicts in `~/.config/skls-mgr`:
 
 - **Interactive Mode**: You will be prompted to enter a new directory name.
 - **Non-interactive Mode**: If `--skill` is used, the command will terminate immediately without automatic renaming.
+
+Legacy lock entries without a recorded skill path are not treated as overwrite matches. Run `skls-mgr update` to repair them when the source contains one exact, case-insensitive name match.
 
 ## Installing to Projects
 
@@ -98,7 +102,7 @@ npx skls-mgr install
 
 ```
 
-By default, this opens an interactive interface listing all top-level directories in `~/.config/skls-mgr` (including manually created skills).
+By default, this opens an interactive interface listing all top-level directories in `~/.config/skls-mgr` (including manually created skills). Manual skills appear first, followed by repository groups in name order, with skills sorted by name inside each group. Selecting a group selects or clears all of its skills, and partially selected groups show a partial state.
 
 ### Options
 
@@ -145,6 +149,8 @@ When `--link` is selected, if the current environment does not support creating 
 | `npx skls-mgr help`              | Show help.                                                                                 |
 | `npx skls-mgr version`           | Show version.                                                                              |
 
+`list` and the interactive selectors for `install`, `remove`, and `update` use the same manual-first repository grouping and name ordering.
+
 ### Examples
 
 ```bash
@@ -177,7 +183,7 @@ npx skls-mgr version
 
 ```
 
-> `skls-mgr update` relies on the GitHub API. To avoid rate limits for anonymous requests (60 per hour), it is recommended to configure `GITHUB_TOKEN` or `GH_TOKEN` in your environment variables to increase the quota (5000 per hour).
+> Automatic version checks for GitHub-managed skills use the GitHub API. To avoid rate limits for anonymous requests (60 per hour), configure the `GITHUB_TOKEN` or `GH_TOKEN` environment variable to increase the quota (5000 per hour). Local and other Git sources can still be updated explicitly. Running `skls-mgr update` without names also attempts to repair legacy lock entries that do not record a skill path.
 
 ## find-skills
 

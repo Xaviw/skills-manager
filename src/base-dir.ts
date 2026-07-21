@@ -1,17 +1,26 @@
-import { readdir } from 'fs/promises';
+import { existsSync } from 'fs';
+import { readdir, rename, rm } from 'fs/promises';
 import { join } from 'path';
 import { ensureBaseDir, getBaseDir } from './paths.js';
-import {
-  createDirectorySymlink,
-  removeIfExists,
-  sanitizeName,
-} from './filesystem.js';
+import { copyDirectory, sanitizeName } from './filesystem.js';
 import {
   addSkillToLock,
   readSkillLock,
   removeSkillFromLock,
 } from './skill-lock.js';
-import type { BaseSkillInfo, ManagedSkillLockEntry } from './types.js';
+import type { BaseSkillInfo, ManagedSkillTracking } from './types.js';
+
+// ponytail: 单个 CLI 只使用一个 lock；出现多 home 并发需求时再按 lock 路径拆分队列。
+let commitQueue: Promise<void> = Promise.resolve();
+
+async function serializeCommit<T>(commit: () => Promise<T>): Promise<T> {
+  const result = commitQueue.then(commit, commit);
+  commitQueue = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  return await result;
+}
 
 export async function listBaseSkills(): Promise<BaseSkillInfo[]> {
   const baseDir = await ensureBaseDir();
@@ -36,61 +45,90 @@ export async function listBaseSkills(): Promise<BaseSkillInfo[]> {
   }
 }
 
-export async function hasBaseSkillDirectory(
-  directoryName: string,
-): Promise<boolean> {
-  const skills = await listBaseSkills();
-  return skills.some(
-    (skill) => skill.directoryName === sanitizeName(directoryName),
-  );
-}
-
-export async function installSkillToBaseDir(
+export async function installManagedSkill(
   sourceDir: string,
   directoryName: string,
-  lockEntry?: Omit<ManagedSkillLockEntry, 'installedAt' | 'updatedAt'>,
-): Promise<string> {
+  tracking: ManagedSkillTracking,
+): Promise<void> {
   const baseDir = await ensureBaseDir();
   const sanitizedDirectoryName = sanitizeName(directoryName);
   const targetDir = join(baseDir, sanitizedDirectoryName);
-  const { replaceDirectoryWithCopy } = await import('./filesystem.js');
+  const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const tempDir = join(baseDir, `${sanitizedDirectoryName}.tmp-${suffix}`);
+  const backupDir = join(baseDir, `${sanitizedDirectoryName}.bak-${suffix}`);
+  let hasBackup = false;
+  let hasReplacement = false;
 
-  await replaceDirectoryWithCopy(sourceDir, targetDir);
-
-  if (lockEntry) {
-    await addSkillToLock(sanitizedDirectoryName, lockEntry);
+  try {
+    await copyDirectory(sourceDir, tempDir);
+  } catch (error) {
+    await rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    throw error;
   }
 
-  return targetDir;
-}
+  await serializeCommit(async () => {
+    try {
+      if (existsSync(targetDir)) {
+        await rename(targetDir, backupDir);
+        hasBackup = true;
+      }
 
-export async function installBaseSkillToProject(
-  directoryName: string,
-  targetRootDir: string,
-  mode: 'copy' | 'link',
-): Promise<{ path: string; linked: boolean }> {
-  const sourceDir = join(getBaseDir(), directoryName);
-  const targetDir = join(targetRootDir, directoryName);
+      await rename(tempDir, targetDir);
+      hasReplacement = true;
+      await addSkillToLock(sanitizedDirectoryName, tracking);
 
-  if (mode === 'copy') {
-    const { replaceDirectoryWithCopy } = await import('./filesystem.js');
-    await replaceDirectoryWithCopy(sourceDir, targetDir);
-    return { path: targetDir, linked: false };
-  }
+      if (hasBackup) {
+        await rm(backupDir, { recursive: true, force: true }).catch(() => {});
+      }
+    } catch (error) {
+      await rm(tempDir, { recursive: true, force: true }).catch(() => {});
 
-  await removeIfExists(targetDir);
+      try {
+        if (hasReplacement) {
+          await rm(targetDir, { recursive: true, force: true });
+        }
+        if (hasBackup) {
+          await rename(backupDir, targetDir);
+        }
+      } catch (rollbackError) {
+        const recoveryPath = hasBackup ? backupDir : targetDir;
+        throw new Error(
+          `${error instanceof Error ? error.message : String(error)}; rollback failed, recovery path: ${recoveryPath}`,
+          { cause: rollbackError },
+        );
+      }
 
-  const linked = await createDirectorySymlink(sourceDir, targetDir);
-  if (!linked) {
-    const { replaceDirectoryWithCopy } = await import('./filesystem.js');
-    await replaceDirectoryWithCopy(sourceDir, targetDir);
-  }
-
-  return { path: targetDir, linked };
+      throw error;
+    }
+  });
 }
 
 export async function removeBaseSkill(directoryName: string): Promise<void> {
-  const skillPath = join(getBaseDir(), directoryName);
-  await removeIfExists(skillPath);
-  await removeSkillFromLock(directoryName);
+  await serializeCommit(async () => {
+    const skillPath = join(getBaseDir(), directoryName);
+    if (!existsSync(skillPath)) {
+      return;
+    }
+
+    const backupPath = `${skillPath}.bak-${Date.now()}-${Math.random()
+      .toString(16)
+      .slice(2)}`;
+    await rename(skillPath, backupPath);
+
+    try {
+      await removeSkillFromLock(directoryName);
+    } catch (error) {
+      try {
+        await rename(backupPath, skillPath);
+      } catch (rollbackError) {
+        throw new Error(
+          `${error instanceof Error ? error.message : String(error)}; rollback failed, recovery path: ${backupPath}`,
+          { cause: rollbackError },
+        );
+      }
+      throw error;
+    }
+
+    await rm(backupPath, { recursive: true, force: true }).catch(() => {});
+  });
 }

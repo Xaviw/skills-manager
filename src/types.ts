@@ -4,6 +4,35 @@ export interface Skill {
   path: string;
 }
 
+export type SourceDescriptor =
+  | {
+      kind: 'local';
+      localPath: string;
+      subpath?: string;
+    }
+  | {
+      kind: 'git';
+      url: string;
+      ref?: string;
+      subpath?: string;
+      githubRepo?: string;
+    };
+
+export interface SourceSkill extends Skill {
+  skillPath: string;
+}
+
+export interface SourceIssue {
+  code: 'unreadable-skill' | 'invalid-skill' | 'outside-source';
+  skillPath: string;
+}
+
+export interface SourceSnapshot {
+  source: SourceDescriptor;
+  skills: SourceSkill[];
+  issues: SourceIssue[];
+}
+
 export type ParsedSourceType = 'github' | 'git' | 'local';
 
 export interface ParsedSource {
@@ -19,11 +48,17 @@ export interface ManagedSkillLockEntry {
   source: string;
   sourceType: ParsedSourceType;
   sourceUrl: string;
+  sourceRef?: string;
   skillPath?: string;
   skillFolderHash: string;
   installedAt: string;
   updatedAt: string;
 }
+
+export type ManagedSkillTracking = Omit<
+  ManagedSkillLockEntry,
+  'installedAt' | 'updatedAt'
+>;
 
 export interface ManagedSkillLockFile {
   version: number;

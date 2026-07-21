@@ -1,17 +1,19 @@
 import * as p from '@clack/prompts';
-import { relative } from 'path';
-import { hasBaseSkillDirectory, installSkillToBaseDir } from './base-dir.js';
+import { installManagedSkill, listBaseSkills } from './base-dir.js';
 import { sanitizeName } from './filesystem.js';
-import { cloneRepo, cleanupTempDir } from './git.js';
+import { fetchSkillFolderHashes, getGitHubToken } from './github.js';
 import { t } from './i18n.js';
-import { isListPromptCancel, multiselectListPrompt } from './list-prompt.js';
 import { ensureBaseDir, getBaseDir } from './paths.js';
 import { createProgressSpinner } from './progress-spinner.js';
-import { formatPromptHint, showPromptHelp } from './prompt-format.js';
-import { getOwnerRepo, parseSource } from './source-parser.js';
-import { fetchSkillFolderHash, getGitHubToken } from './skill-lock.js';
-import { discoverSkills, filterSkills } from './skills.js';
-import type { Skill } from './types.js';
+import { isPromptCancel, multiselectPrompt, textPrompt } from './prompt.js';
+import type { PromptCancel } from './prompt.js';
+import {
+  compareNames,
+  getRepositoryIdentity,
+  getSourceRepositoryIdentity,
+} from './skill-groups.js';
+import { withSource } from './source-intake.js';
+import type { Skill, SourceIssue, SourceSkill } from './types.js';
 import type { ProgressSpinner } from './progress-spinner.js';
 
 export interface AddOptions {
@@ -19,8 +21,41 @@ export interface AddOptions {
 }
 
 interface ResolvedInstall {
-  skill: Skill;
+  skill: SourceSkill;
   directoryName: string;
+}
+
+function getSourceIssueMessage(issue: SourceIssue): string {
+  const keys = {
+    'unreadable-skill': 'unreadableSkillManifest',
+    'invalid-skill': 'invalidSkillManifest',
+    'outside-source': 'skillOutsideSource',
+  } as const;
+  return `${issue.skillPath}: ${t(keys[issue.code])}`;
+}
+
+function selectNamedSkills(
+  skills: SourceSkill[],
+  names: string[],
+): SourceSkill[] {
+  const selected = new Map<string, SourceSkill>();
+  for (const name of names) {
+    const matches = skills.filter(
+      (skill) => skill.name.toLowerCase() === name.toLowerCase(),
+    );
+    if (matches.length > 1) {
+      throw new Error(
+        t('ambiguousSkillName', {
+          name,
+          paths: matches.map((skill) => skill.skillPath).join(', '),
+        }),
+      );
+    }
+    if (matches[0]) {
+      selected.set(matches[0].skillPath, matches[0]);
+    }
+  }
+  return [...selected.values()];
 }
 
 function getMetadataProgressMessage(
@@ -37,8 +72,8 @@ function getMetadataProgressMessage(
 
 async function promptForDirectoryName(
   defaultName: string,
-): Promise<string | symbol> {
-  return p.text({
+): Promise<string | PromptCancel> {
+  return textPrompt({
     message: t('directoryExistsPrompt', { defaultName }),
     defaultValue: `${defaultName}-copy`,
     validate(value) {
@@ -54,18 +89,11 @@ export async function resolveDirectoryName(
   options: AddOptions,
   promptImpl: (
     defaultName: string,
-  ) => Promise<string | symbol> = promptForDirectoryName,
+  ) => Promise<string | PromptCancel> = promptForDirectoryName,
   reservedDirectoryNames: Set<string> = new Set(),
-): Promise<string> {
+): Promise<string | PromptCancel> {
   const defaultName = sanitizeName(skill.name);
-  const hasConflict = async (directoryName: string): Promise<boolean> => {
-    return (
-      reservedDirectoryNames.has(directoryName) ||
-      (await hasBaseSkillDirectory(directoryName))
-    );
-  };
-
-  if (!(await hasConflict(defaultName))) {
+  if (!reservedDirectoryNames.has(defaultName)) {
     reservedDirectoryNames.add(defaultName);
     return defaultName;
   }
@@ -77,12 +105,12 @@ export async function resolveDirectoryName(
   }
 
   const renamed = await promptImpl(defaultName);
-  if (p.isCancel(renamed)) {
-    throw new Error(t('installationCancelled'));
+  if (isPromptCancel(renamed)) {
+    return renamed;
   }
 
   const nextName = sanitizeName(renamed);
-  if (await hasConflict(nextName)) {
+  if (reservedDirectoryNames.has(nextName)) {
     throw new Error(t('skillDirectoryConflict', { directoryName: nextName }));
   }
 
@@ -131,159 +159,178 @@ export async function runAdd(
     p.log.error(t('missingSource'));
     process.exit(1);
   }
+  if (
+    !options.skill?.length &&
+    (!process.stdin.isTTY || !process.stdout.isTTY)
+  ) {
+    p.log.error(t('nonInteractiveAddRequiresSkill'));
+    process.exit(1);
+  }
 
   await ensureBaseDir();
-  const parsed = parseSource(sourceInput);
-  let tempDir: string | null = null;
   const shouldRenderProgress = Boolean(process.stdout.isTTY);
+  let cancelled = false;
+  let installedCount = 0;
 
   try {
-    let sourceDir: string;
-    let discoveredSkills: Skill[];
-
-    if (parsed.type === 'local') {
-      sourceDir = parsed.localPath!;
-      discoveredSkills = await discoverSkills(sourceDir, parsed.subpath);
-    } else {
-      const loadSpinner: ProgressSpinner | null = shouldRenderProgress
-        ? createProgressSpinner()
-        : null;
-      let loadMessage = t('cloningSourceRepository');
-
-      loadSpinner?.start(loadMessage);
-
-      try {
-        tempDir = await cloneRepo(parsed.url, parsed.ref);
-        sourceDir = tempDir;
-        loadMessage = t('discoveringSkillsInSource');
-        loadSpinner?.message(loadMessage);
-        discoveredSkills = await discoverSkills(sourceDir, parsed.subpath);
-      } finally {
-        loadSpinner?.stop(loadMessage);
-      }
-    }
-
-    if (discoveredSkills.length === 0) {
-      p.log.error(t('noSkillsFoundInSource'));
-      process.exit(1);
-    }
-
-    let selectedSkills = discoveredSkills;
-    if (options.skill?.length) {
-      selectedSkills = filterSkills(discoveredSkills, options.skill);
-      if (selectedSkills.length === 0) {
-        p.log.error(
-          t('noMatchingSkillsFound', { names: options.skill.join(', ') }),
-        );
-        process.exit(1);
-      }
-    } else {
-      showPromptHelp(t('multiselectPromptHelp'));
-      const picked = await multiselectListPrompt({
-        message: t('selectSkillsToInstall'),
-        options: discoveredSkills.map((skill) => ({
-          value: skill.name,
-          label: skill.name,
-          hint: formatPromptHint(skill.description),
-        })),
-        initialValues: discoveredSkills.map((skill) => skill.name),
-        required: true,
-      });
-
-      if (isListPromptCancel(picked)) {
-        p.cancel(t('installationCancelled'));
-        process.exit(0);
+    await withSource(sourceInput, async ({ source, skills, issues }) => {
+      for (const issue of issues) {
+        p.log.warn(getSourceIssueMessage(issue));
       }
 
-      selectedSkills = discoveredSkills.filter((skill) =>
-        (picked as string[]).includes(skill.name),
+      if (skills.length === 0) {
+        throw new Error(t('noSkillsFoundInSource'));
+      }
+
+      const orderedSkills = [...skills].sort(
+        (left, right) =>
+          compareNames(left.name, right.name) ||
+          compareNames(left.skillPath, right.skillPath),
       );
-    }
+      let selectedSkills = orderedSkills;
+      if (options.skill?.length) {
+        selectedSkills = selectNamedSkills(orderedSkills, options.skill);
+        if (selectedSkills.length === 0) {
+          throw new Error(
+            t('noMatchingSkillsFound', { names: options.skill.join(', ') }),
+          );
+        }
+      } else {
+        const picked = await multiselectPrompt({
+          message: t('selectSkillsToInstall'),
+          options: orderedSkills.map((skill) => ({
+            value: skill.skillPath,
+            label: skill.name,
+            hint: `${skill.description} - ${skill.skillPath}`,
+          })),
+          initialValues: orderedSkills.map((skill) => skill.skillPath),
+        });
 
-    const reservedDirectoryNames = new Set<string>();
-    const resolvedInstalls: ResolvedInstall[] = [];
-    for (const skill of selectedSkills) {
-      resolvedInstalls.push({
-        skill,
-        directoryName: await resolveDirectoryName(
-          skill,
-          options,
-          promptForDirectoryName,
-          reservedDirectoryNames,
-        ),
-      });
-    }
+        if (isPromptCancel(picked)) {
+          p.cancel(t('installationCancelled'));
+          cancelled = true;
+          return;
+        }
 
-    const trackableSource = getOwnerRepo(parsed);
-    const normalizedSource = trackableSource ?? parsed.url;
-    const token = getGitHubToken();
-    const metadataSpinner: ProgressSpinner | null =
-      shouldRenderProgress && trackableSource && resolvedInstalls.length > 0
-        ? createProgressSpinner()
-        : null;
-    let completedMetadataCount = 0;
-
-    metadataSpinner?.start(
-      getMetadataProgressMessage(0, resolvedInstalls.length),
-    );
-
-    try {
-      for (const item of resolvedInstalls) {
-        const skillPath = relative(sourceDir, item.skill.path)
-          .split('\\')
-          .join('/');
-        const skillMdRelativePath = skillPath
-          ? `${skillPath}/SKILL.md`
-          : 'SKILL.md';
-
-        metadataSpinner?.message(
-          getMetadataProgressMessage(
-            completedMetadataCount + 1,
-            resolvedInstalls.length,
-            item.skill.name,
-          ),
+        selectedSkills = orderedSkills.filter((skill) =>
+          picked.includes(skill.skillPath),
         );
+      }
 
-        const skillFolderHash = trackableSource
-          ? ((await fetchSkillFolderHash(
-              trackableSource,
-              skillMdRelativePath,
-              token,
-            )) ?? '')
-          : '';
-
-        completedMetadataCount += 1;
-
-        await installSkillToBaseDir(item.skill.path, item.directoryName, {
-          displayName: item.skill.name,
-          source: normalizedSource,
-          sourceType: parsed.type,
-          sourceUrl: parsed.url,
-          skillPath: skillMdRelativePath,
-          skillFolderHash,
+      const baseSkills = await listBaseSkills();
+      const reservedDirectoryNames = new Set(
+        baseSkills.map((skill) => skill.directoryName),
+      );
+      const repositoryIdentity = getSourceRepositoryIdentity(source);
+      const resolvedInstalls: ResolvedInstall[] = [];
+      for (const skill of selectedSkills) {
+        const matches = baseSkills.filter(
+          (baseSkill) =>
+            baseSkill.lockEntry?.skillPath === skill.skillPath &&
+            getRepositoryIdentity(baseSkill.lockEntry) === repositoryIdentity,
+        );
+        if (matches.length > 1) {
+          throw new Error(
+            t('managedSkillIdentityConflict', { skillPath: skill.skillPath }),
+          );
+        }
+        const directoryName =
+          matches[0]?.directoryName ??
+          (await resolveDirectoryName(
+            skill,
+            options,
+            promptForDirectoryName,
+            reservedDirectoryNames,
+          ));
+        if (isPromptCancel(directoryName)) {
+          p.cancel(t('installationCancelled'));
+          cancelled = true;
+          return;
+        }
+        resolvedInstalls.push({
+          skill,
+          directoryName,
         });
       }
-    } finally {
-      metadataSpinner?.stop(
-        getMetadataProgressMessage(
-          completedMetadataCount,
-          resolvedInstalls.length,
-        ),
-      );
-    }
 
-    p.log.success(
-      t('installedSkillsIntoBaseDir', {
-        count: resolvedInstalls.length,
-        baseDir: getBaseDir(),
-      }),
-    );
+      const sourceUrl = source.kind === 'local' ? source.localPath : source.url;
+      const normalizedSource =
+        source.kind === 'git' && source.githubRepo
+          ? source.githubRepo
+          : sourceUrl;
+      const sourceType =
+        source.kind === 'local'
+          ? 'local'
+          : source.githubRepo
+            ? 'github'
+            : 'git';
+      const token = getGitHubToken();
+      const metadataSpinner: ProgressSpinner | null =
+        shouldRenderProgress &&
+        source.kind === 'git' &&
+        source.githubRepo &&
+        resolvedInstalls.length > 0
+          ? createProgressSpinner()
+          : null;
+      let completedMetadataCount = 0;
+
+      metadataSpinner?.start(
+        getMetadataProgressMessage(0, resolvedInstalls.length),
+      );
+
+      try {
+        const hashes =
+          source.kind === 'git' && source.githubRepo
+            ? await fetchSkillFolderHashes(
+                source.githubRepo,
+                resolvedInstalls.map((item) => item.skill.skillPath),
+                token,
+                source.ref,
+              )
+            : {};
+        for (const item of resolvedInstalls) {
+          metadataSpinner?.message(
+            getMetadataProgressMessage(
+              completedMetadataCount + 1,
+              resolvedInstalls.length,
+              item.skill.name,
+            ),
+          );
+
+          completedMetadataCount += 1;
+
+          await installManagedSkill(item.skill.path, item.directoryName, {
+            displayName: item.skill.name,
+            source: normalizedSource,
+            sourceType,
+            sourceUrl,
+            sourceRef: source.kind === 'git' ? source.ref : undefined,
+            skillPath: item.skill.skillPath,
+            skillFolderHash: hashes[item.skill.skillPath] ?? '',
+          });
+        }
+      } finally {
+        metadataSpinner?.stop(
+          getMetadataProgressMessage(
+            completedMetadataCount,
+            resolvedInstalls.length,
+          ),
+        );
+      }
+
+      installedCount = resolvedInstalls.length;
+    });
   } catch (error) {
     p.log.error(error instanceof Error ? error.message : t('unknownError'));
     process.exit(1);
-  } finally {
-    if (tempDir) {
-      await cleanupTempDir(tempDir).catch(() => {});
-    }
+  }
+
+  if (!cancelled) {
+    p.log.success(
+      t('installedSkillsIntoBaseDir', {
+        count: installedCount,
+        baseDir: getBaseDir(),
+      }),
+    );
   }
 }

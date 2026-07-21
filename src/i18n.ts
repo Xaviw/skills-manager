@@ -44,22 +44,30 @@ General:
   ),
   installationCancelled: 'Installation cancelled.',
   missingSource: 'Missing source.',
+  nonInteractiveAddRequiresSkill:
+    'Non-interactive add requires --skill <names...>.',
   noSkillsFoundInSource: 'No skills found in source.',
   noMatchingSkillsFound: withParams(
     ({ names }) => `No matching skills found for: ${names}`,
   ),
+  ambiguousSkillName: withParams(
+    ({ name, paths }) => `Skill name "${name}" is ambiguous: ${paths}`,
+  ),
+  managedSkillIdentityConflict: withParams(
+    ({ skillPath }) =>
+      `Multiple managed skills track the same source path: ${skillPath}`,
+  ),
+  unreadableSkillManifest: 'Could not read SKILL.md',
+  invalidSkillManifest: 'Invalid SKILL.md frontmatter',
+  skillOutsideSource: 'SKILL.md resolves outside the source',
   selectSkillsToInstall: 'Select skills to install',
   multiselectPromptHelp:
     'Use arrow keys to navigate · Space to select · A to select all · Enter to confirm · Esc to cancel',
   selectPromptHelp:
     'Use arrow keys to navigate · Enter to confirm · Esc to cancel',
-  targetDirectoryPromptHelp:
-    'Use arrow keys to switch · Type to edit the focused path · Enter to confirm · Esc to cancel',
-  promptNoOptions: '(no options)',
+  interactiveTerminalRequired: 'An interactive terminal is required.',
   promptCancelled: 'Cancelled',
   promptSelectedCount: withParams(({ count }) => `Selected: ${count}`),
-  promptMoreAbove: withParams(({ count }) => `↑ ${count} more above`),
-  promptMoreBelow: withParams(({ count }) => `↓ ${count} more below`),
   promptSummaryMore: withParams(({ count }) => `+${count} more`),
   installedSkillsIntoBaseDir: withParams(
     ({ count, baseDir }) => `Installed ${count} skill(s) into ${baseDir}`,
@@ -78,6 +86,9 @@ General:
     'Attempted to clean up directory outside of temp directory',
   customPathLabel: 'Custom path...',
   targetDirectory: 'Target directory',
+  targetDirectoryRequired: 'Target directory is required.',
+  nonInteractiveInstallRequiresOptions:
+    'Non-interactive install requires --skill/--all, --dir, and --link/--copy.',
   noSkillsAvailableInBaseDir: 'No skills available in BaseDir.',
   selectSkillsToInstallIntoProject: 'Select skills to install into project',
   installationMode: 'Installation mode',
@@ -99,6 +110,8 @@ General:
     ({ skillName }) => `Skill "${skillName}" was not found.`,
   ),
   selectSkillsToRemove: 'Select skills to remove',
+  nonInteractiveRemoveRequiresNames:
+    'Non-interactive remove requires at least one skill name.',
   removalCancelled: 'Removal cancelled.',
   removedSkill: withParams(({ skillName }) => `Removed ${skillName}`),
   removedSkills: withParams(({ count }) => `Removed ${count} skill(s)`),
@@ -186,21 +199,28 @@ const zhMessages: Record<TranslationKey, MessageValue> = {
   ),
   installationCancelled: '已取消安装。',
   missingSource: '缺少来源参数。',
+  nonInteractiveAddRequiresSkill:
+    '非交互模式添加技能时必须提供 --skill <names...>。',
   noSkillsFoundInSource: '来源中未找到任何技能。',
   noMatchingSkillsFound: withParams(
     ({ names }) => `未找到匹配的技能：${names}`,
   ),
+  ambiguousSkillName: withParams(
+    ({ name, paths }) => `技能名称“${name}”存在歧义：${paths}`,
+  ),
+  managedSkillIdentityConflict: withParams(
+    ({ skillPath }) => `多个托管技能跟踪同一来源路径：${skillPath}`,
+  ),
+  unreadableSkillManifest: '无法读取 SKILL.md',
+  invalidSkillManifest: 'SKILL.md frontmatter 无效',
+  skillOutsideSource: 'SKILL.md 的真实路径超出来源目录',
   selectSkillsToInstall: '选择要安装的技能',
   multiselectPromptHelp:
     '↑↓ 切换 · Space 选择 · A 全选 · Enter 确认 · Esc 取消',
   selectPromptHelp: '↑↓ 切换 · Enter 确认 · Esc 取消',
-  targetDirectoryPromptHelp:
-    '↑↓ 切换 · 直接输入编辑当前路径 · Enter 确认 · Esc 取消',
-  promptNoOptions: '（无可选项）',
+  interactiveTerminalRequired: '需要交互式终端。',
   promptCancelled: '已取消',
   promptSelectedCount: withParams(({ count }) => `已选 ${count} 项`),
-  promptMoreAbove: withParams(({ count }) => `↑ 上方还有 ${count} 项`),
-  promptMoreBelow: withParams(({ count }) => `↓ 下方还有 ${count} 项`),
   promptSummaryMore: withParams(({ count }) => `+${count} 项`),
   installedSkillsIntoBaseDir: withParams(
     ({ count, baseDir }) => `已安装 ${count} 个技能到 ${baseDir}`,
@@ -218,6 +238,9 @@ const zhMessages: Record<TranslationKey, MessageValue> = {
   attemptedTempDirCleanupOutsideTemp: '尝试清理临时目录之外的目录',
   customPathLabel: '自定义路径...',
   targetDirectory: '目标目录',
+  targetDirectoryRequired: '目标目录不能为空。',
+  nonInteractiveInstallRequiresOptions:
+    '非交互模式安装时必须提供 --skill/--all、--dir 和 --link/--copy。',
   noSkillsAvailableInBaseDir: 'BaseDir 中没有可用技能。',
   selectSkillsToInstallIntoProject: '选择要安装到项目中的技能',
   installationMode: '安装方式',
@@ -237,6 +260,8 @@ const zhMessages: Record<TranslationKey, MessageValue> = {
   none: '（无）',
   skillNotFound: withParams(({ skillName }) => `未找到技能 "${skillName}"。`),
   selectSkillsToRemove: '选择要删除的技能',
+  nonInteractiveRemoveRequiresNames:
+    '非交互模式删除时必须提供至少一个技能名称。',
   removalCancelled: '已取消删除。',
   removedSkill: withParams(({ skillName }) => `已移除 ${skillName}`),
   removedSkills: withParams(({ count }) => `已移除 ${count} 个技能`),

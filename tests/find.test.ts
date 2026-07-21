@@ -2,16 +2,22 @@ import * as prompts from '@clack/prompts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resolveCliLocale, t } from '../src/i18n.js';
 import { runFind, searchSkills } from '../src/find.js';
+import * as prompt from '../src/prompt.js';
 
 vi.mock('@clack/prompts', () => ({
   cancel: vi.fn(),
-  isCancel: vi.fn((value) => typeof value === 'symbol'),
-  text: vi.fn(),
   log: {
     error: vi.fn(),
     message: vi.fn(),
     success: vi.fn(),
   },
+}));
+
+vi.mock('../src/prompt.js', () => ({
+  isPromptCancel: vi.fn(() => false),
+  multiselectPrompt: vi.fn(),
+  selectPrompt: vi.fn(),
+  textPrompt: vi.fn(),
 }));
 
 describe('find command', () => {
@@ -32,6 +38,7 @@ describe('find command', () => {
     process.env.SKLS_MGR_FIND_SITE_URL = 'https://skills.site';
     delete process.env.SKILLS_API_URL;
     delete process.env.SKILLS_SITE_URL;
+    vi.mocked(prompt.isPromptCancel).mockReturnValue(false);
   });
 
   afterEach(() => {
@@ -128,19 +135,16 @@ describe('find command', () => {
   });
 
   it('prompts for a query, lets the user select a result, and reuses add', async () => {
-    const promptSelect = vi
-      .fn()
-      .mockResolvedValue('vercel-labs/skills/find-skills::find-skills');
+    vi.mocked(prompt.textPrompt).mockResolvedValue('discover skills');
+    vi.mocked(prompt.selectPrompt).mockResolvedValue(
+      'vercel-labs/skills/find-skills::find-skills',
+    );
     const runAddImpl = vi.fn().mockResolvedValue(undefined);
-    const logPromptHelp = vi.fn();
     const log = vi.fn();
 
     await runFind([], {
       isInteractive: true,
       log,
-      logPromptHelp,
-      promptForQuery: vi.fn().mockResolvedValue('discover skills'),
-      promptSelect: promptSelect as never,
       runAddImpl: runAddImpl as never,
       searchSkillsImpl: vi.fn().mockResolvedValue([
         {
@@ -158,8 +162,12 @@ describe('find command', () => {
       ]),
     });
 
-    expect(logPromptHelp).toHaveBeenCalledWith(t('selectPromptHelp'));
-    expect(promptSelect).toHaveBeenCalledWith({
+    expect(prompt.textPrompt).toHaveBeenCalledWith({
+      message: t('findQueryPrompt'),
+      placeholder: 'react performance',
+      validate: expect.any(Function),
+    });
+    expect(prompt.selectPrompt).toHaveBeenCalledWith({
       message: t('selectSkillToAdd'),
       options: [
         {
@@ -197,16 +205,14 @@ describe('find command', () => {
   });
 
   it('falls back to slug when source is missing, matching the upstream selection bridge', async () => {
-    const promptSelect = vi
-      .fn()
-      .mockResolvedValue('owner/skills/skill-one::skill-one');
+    vi.mocked(prompt.textPrompt).mockResolvedValue('skill one');
+    vi.mocked(prompt.selectPrompt).mockResolvedValue(
+      'owner/skills/skill-one::skill-one',
+    );
     const runAddImpl = vi.fn().mockResolvedValue(undefined);
 
     await runFind([], {
       isInteractive: true,
-      logPromptHelp: () => {},
-      promptForQuery: vi.fn().mockResolvedValue('skill one'),
-      promptSelect: promptSelect as never,
       runAddImpl: runAddImpl as never,
       log: vi.fn(),
       searchSkillsImpl: vi.fn().mockResolvedValue([

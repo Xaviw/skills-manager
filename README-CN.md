@@ -46,7 +46,7 @@ npx skls-mgr install
 npx skls-mgr add <source>
 ```
 
-默认会进入交互式界面，列出来源包含的全部技能。
+默认会进入交互式界面，按名称不区分大小写的自然升序列出来源包含的全部技能。
 
 ### 选项
 
@@ -82,10 +82,14 @@ npx skls-mgr add vercel-labs/agent-skills --skill frontend-design skill-creator
 
 ### 冲突处理
 
-如果待安装技能的目录名和 `~/.config/skls-mgr` 中已有一级目录重名：
+再次添加来自同一仓库、仓库内技能路径也相同的托管技能时，会直接覆盖原目录并保留现有目录名。
+
+对于 `~/.config/skls-mgr` 中的其他目录重名冲突：
 
 - 交互模式下，会要求你输入新的目录名
 - 非交互模式下，如果使用了 `--skill`，命令会直接终止，不会自动改名
+
+缺少技能来源路径记录的旧 lock entry 不会被视为可覆盖项。可以运行 `skls-mgr update`；当来源中存在唯一且不区分大小写的同名技能时，命令会修复该记录。
 
 ## 安装到项目
 
@@ -93,7 +97,7 @@ npx skls-mgr add vercel-labs/agent-skills --skill frontend-design skill-creator
 npx skls-mgr install
 ```
 
-默认会进入交互式界面，列出 `~/.config/skls-mgr` 下全部一级目录（包括手动创建的技能）。
+默认会进入交互式界面，列出 `~/.config/skls-mgr` 下全部一级目录（包括手动创建的技能）。手动技能固定在最前，随后是按名称排序的仓库组，各组内技能也按名称排序。选中仓库组会全选或取消全选组内技能，部分选中时仓库组会显示半选状态。
 
 ### 选项
 
@@ -139,6 +143,8 @@ npx skls-mgr install --dir ./.agents/skills --link
 | `npx skls-mgr help`              | 显示帮助                                                           |
 | `npx skls-mgr version`           | 显示版本                                                           |
 
+`list` 以及 `install`、`remove`、`update` 的交互式选择列表均使用相同的手动技能优先、按仓库分组和名称排序规则。
+
 ### 示例
 
 ```bash
@@ -170,7 +176,7 @@ npx skls-mgr help
 npx skls-mgr version
 ```
 
-> `skls-mgr update` 依赖 GitHub API。为避免匿名请求带来的限流限制（每小时 60 次），建议在环境变量中配置 `GITHUB_TOKEN` 或 `GH_TOKEN` 以提升配额（每小时 5000 次）。
+> GitHub 托管技能的自动版本检查依赖 GitHub API。为避免匿名请求带来的限流限制（每小时 60 次），建议在环境变量中配置 `GITHUB_TOKEN` 或 `GH_TOKEN` 以提升配额（每小时 5000 次）。本地来源和其他 Git 来源仍可按名称显式更新。无参数运行 `skls-mgr update` 时，也会尝试修复未记录技能来源路径的旧 lock entry。
 
 ## find-skills
 

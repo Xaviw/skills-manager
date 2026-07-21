@@ -7,11 +7,19 @@ import { resolveDirectoryName } from '../src/add.js';
 import * as baseDir from '../src/base-dir.js';
 import { resolveCliLocale, t } from '../src/i18n.js';
 import { getBaseDir } from '../src/paths.js';
+import * as prompt from '../src/prompt.js';
 import { readSkillLock } from '../src/skill-lock.js';
 import { parseSource } from '../src/source-parser.js';
 import { runUpdate } from '../src/update.js';
 
-const { installSkillToBaseDir } = baseDir;
+vi.mock('../src/prompt.js', () => ({
+  isPromptCancel: vi.fn(() => false),
+  multiselectPrompt: vi.fn(),
+  selectPrompt: vi.fn(),
+  textPrompt: vi.fn(),
+}));
+
+const { installManagedSkill } = baseDir;
 
 async function createSkill(
   dir: string,
@@ -32,6 +40,7 @@ describe('core modules', () => {
   const locale = resolveCliLocale();
 
   beforeEach(async () => {
+    vi.clearAllMocks();
     homeDir = await mkdtemp(join(tmpdir(), 'skls-mgr-home-'));
     originalHome = process.env.USERPROFILE;
     process.env.USERPROFILE = homeDir;
@@ -128,6 +137,7 @@ describe('core modules', () => {
       skill,
       {},
       async () => 'skill-one-copy',
+      new Set(['skill-one']),
     );
     expect(resolved).toBe('skill-one-copy');
   });
@@ -167,11 +177,12 @@ describe('core modules', () => {
       'before it reaches the terminal renderer',
     ].join('\n');
 
-    await installSkillToBaseDir(sourceSkillDir, 'skill-one', {
+    await installManagedSkill(sourceSkillDir, 'skill-one', {
       displayName: 'skill-one',
       source: trackedSource,
       sourceType: 'github',
       sourceUrl: sourceRepo,
+      sourceRef: 'main',
       skillPath: 'skills/skill-one/SKILL.md',
       skillFolderHash: 'old-hash',
     });
@@ -185,12 +196,10 @@ describe('core modules', () => {
     });
     vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
 
-    const promptMultiselect = vi.fn().mockResolvedValue(['skill-one']);
+    vi.mocked(prompt.multiselectPrompt).mockResolvedValue(['skill-one']);
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     await runUpdate({
       isInteractive: true,
-      promptMultiselect: promptMultiselect as never,
-      logPromptHelp: () => {},
     });
 
     const lock = await readSkillLock();
@@ -201,14 +210,13 @@ describe('core modules', () => {
       'utf-8',
     );
     expect(skillContent).toContain('# version 2');
-    expect(promptMultiselect).toHaveBeenCalledTimes(1);
-    const [promptCall] = promptMultiselect.mock.calls;
+    expect(prompt.multiselectPrompt).toHaveBeenCalledTimes(1);
+    const [promptCall] = vi.mocked(prompt.multiselectPrompt).mock.calls;
     const promptOption = promptCall?.[0].options[0];
     expect(promptOption?.value).toBe('skill-one');
     expect(promptOption?.label).toBe('skill-one');
-    expect(promptOption?.hint).toContain('owner/repo');
-    expect(promptOption?.hint).toContain('...');
-    expect(promptOption?.hint).not.toContain('\n');
+    expect(promptOption?.hint).toBe(trackedSource);
+    expect(promptOption?.group).toBe(sourceRepo);
     expect(logSpy).toHaveBeenCalledWith(
       t('updatedSkills', { count: 1 }, locale),
     );
@@ -229,20 +237,22 @@ describe('core modules', () => {
     await createSkill(installedSkillOneDir, 'skill-one', '# version 1');
     await createSkill(installedSkillTwoDir, 'skill-two', '# version 1');
 
-    await installSkillToBaseDir(installedSkillOneDir, 'skill-one', {
+    await installManagedSkill(installedSkillOneDir, 'skill-one', {
       displayName: 'skill-one',
       source: 'owner/repo',
       sourceType: 'github',
       sourceUrl: sourceRepo,
+      sourceRef: 'main',
       skillPath: 'skills/skill-one/SKILL.md',
       skillFolderHash: 'old-hash-1',
     });
 
-    await installSkillToBaseDir(installedSkillTwoDir, 'skill-two', {
+    await installManagedSkill(installedSkillTwoDir, 'skill-two', {
       displayName: 'skill-two',
       source: 'owner/repo',
       sourceType: 'github',
       sourceUrl: sourceRepo,
+      sourceRef: 'main',
       skillPath: 'skills/skill-two/SKILL.md',
       skillFolderHash: 'old-hash-2',
     });
@@ -259,10 +269,8 @@ describe('core modules', () => {
     });
     vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
 
-    const promptMultiselect = vi.fn();
     await runUpdate({
       isInteractive: true,
-      promptMultiselect: promptMultiselect as never,
       skillNames: ['skill-two'],
     });
 
@@ -280,7 +288,7 @@ describe('core modules', () => {
     );
     expect(skillOneContent).toContain('# version 1');
     expect(skillTwoContent).toContain('# version 2');
-    expect(promptMultiselect).not.toHaveBeenCalled();
+    expect(prompt.multiselectPrompt).not.toHaveBeenCalled();
 
     rmSync(sourceRepo, { recursive: true, force: true });
     rmSync(installedRepo, { recursive: true, force: true });
@@ -299,44 +307,41 @@ describe('core modules', () => {
     ).rejects.toMatchObject({ code: 1 });
   });
 
-  it('exits when a requested skill exists but cannot be updated', async () => {
+  it('force-updates a requested local managed skill without a hash', async () => {
     const localSource = await mkdtemp(join(tmpdir(), 'skls-mgr-local-'));
     const localSkillDir = join(localSource, 'local-skill');
     await createSkill(localSkillDir, 'local-skill', '# local version');
 
-    await installSkillToBaseDir(localSkillDir, 'local-skill', {
+    await installManagedSkill(localSkillDir, 'local-skill', {
       displayName: 'local-skill',
       source: localSource,
       sourceType: 'local',
       sourceUrl: localSource,
-      skillPath: 'SKILL.md',
+      skillPath: 'local-skill/SKILL.md',
       skillFolderHash: '',
     });
+    await createSkill(localSkillDir, 'local-skill', '# local version 2');
 
-    const exitError = new Error('process.exit');
-    vi.spyOn(process, 'exit').mockImplementation(((
-      code?: string | number | null | undefined,
-    ) => {
-      throw Object.assign(exitError, { code });
-    }) as never);
+    await runUpdate({ skillNames: ['local-skill'] });
 
-    await expect(
-      runUpdate({ skillNames: ['local-skill'] }),
-    ).rejects.toMatchObject({ code: 1 });
+    expect(
+      await readFile(join(getBaseDir(), 'local-skill', 'SKILL.md'), 'utf-8'),
+    ).toContain('# local version 2');
 
     rmSync(localSource, { recursive: true, force: true });
   });
 
-  it('updates GitHub-backed git URL skills when tracking metadata is present', async () => {
+  it('updates historical GitHub skills when tracking metadata is present', async () => {
     const sourceRepo = await mkdtemp(join(tmpdir(), 'skls-mgr-source-'));
     const sourceSkillDir = join(sourceRepo, 'skills', 'skill-one');
     await createSkill(sourceSkillDir, 'skill-one', '# version 2');
 
-    await installSkillToBaseDir(sourceSkillDir, 'skill-one', {
+    await installManagedSkill(sourceSkillDir, 'skill-one', {
       displayName: 'skill-one',
       source: 'owner/repo',
-      sourceType: 'git',
+      sourceType: 'github',
       sourceUrl: sourceRepo,
+      sourceRef: 'main',
       skillPath: 'skills/skill-one/SKILL.md',
       skillFolderHash: 'old-hash',
     });
@@ -350,11 +355,9 @@ describe('core modules', () => {
     });
     vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
 
-    const promptMultiselect = vi.fn().mockResolvedValue(['skill-one']);
+    vi.mocked(prompt.multiselectPrompt).mockResolvedValue(['skill-one']);
     await runUpdate({
       isInteractive: true,
-      promptMultiselect: promptMultiselect as never,
-      logPromptHelp: () => {},
     });
 
     const lock = await readSkillLock();
@@ -377,20 +380,22 @@ describe('core modules', () => {
     await createSkill(validSkillDir, 'skill-one', '# version 2');
     await createSkill(missingSkillDir, 'skill-two', '# version 1');
 
-    await installSkillToBaseDir(validSkillDir, 'skill-one', {
+    await installManagedSkill(validSkillDir, 'skill-one', {
       displayName: 'skill-one',
       source: 'owner/repo',
       sourceType: 'github',
       sourceUrl: sourceRepo,
+      sourceRef: 'main',
       skillPath: 'skills/skill-one/SKILL.md',
       skillFolderHash: 'old-hash-1',
     });
 
-    await installSkillToBaseDir(missingSkillDir, 'skill-two', {
+    await installManagedSkill(missingSkillDir, 'skill-two', {
       displayName: 'skill-two',
       source: 'owner/repo',
       sourceType: 'github',
       sourceUrl: sourceRepo,
+      sourceRef: 'main',
       skillPath: 'skills/missing-skill/SKILL.md',
       skillFolderHash: 'old-hash-2',
     });
@@ -407,16 +412,15 @@ describe('core modules', () => {
     });
     vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
 
-    const promptMultiselect = vi
-      .fn()
-      .mockResolvedValue(['skill-one', 'skill-two']);
+    vi.mocked(prompt.multiselectPrompt).mockResolvedValue([
+      'skill-one',
+      'skill-two',
+    ]);
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     const originalExitCode = process.exitCode;
 
     await runUpdate({
       isInteractive: true,
-      promptMultiselect: promptMultiselect as never,
-      logPromptHelp: () => {},
     });
 
     const lock = await readSkillLock();
@@ -427,6 +431,7 @@ describe('core modules', () => {
     const output = logSpy.mock.calls.flat().join('\n');
     expect(output).toContain(t('updatedSkills', { count: 1 }, locale));
     expect(output).toContain(t('failedUpdates', {}, locale));
+    expect(output).toContain(sourceRepo);
     expect(output).toContain(
       `skill-two: ${t('couldNotLocateSkillInSource', {}, locale)}`,
     );
@@ -440,11 +445,12 @@ describe('core modules', () => {
     const sourceSkillDir = join(sourceRepo, 'skills', 'skill-one');
     await createSkill(sourceSkillDir, 'skill-one', '# version 2');
 
-    await installSkillToBaseDir(sourceSkillDir, 'skill-one', {
+    await installManagedSkill(sourceSkillDir, 'skill-one', {
       displayName: 'skill-one',
       source: 'owner/repo',
       sourceType: 'github',
       sourceUrl: sourceRepo,
+      sourceRef: 'main',
       skillPath: 'skills/skill-one/SKILL.md',
       skillFolderHash: 'old-hash',
     });
@@ -551,11 +557,12 @@ describe('core modules', () => {
     ].entries()) {
       const sourceSkillDir = join(sourceRepo, 'skills', skillName);
       await createSkill(sourceSkillDir, skillName, `# version ${index + 1}`);
-      await installSkillToBaseDir(sourceSkillDir, skillName, {
+      await installManagedSkill(sourceSkillDir, skillName, {
         displayName: skillName,
         source: 'owner/repo',
         sourceType: 'github',
         sourceUrl: sourceRepo,
+        sourceRef: 'main',
         skillPath: `skills/${skillName}/SKILL.md`,
         skillFolderHash: tree[index]!.sha,
       });
@@ -584,7 +591,8 @@ describe('core modules', () => {
       shouldRenderProgress: false,
     });
 
-    expect(maxConcurrentRequests).toBe(2);
+    expect(maxConcurrentRequests).toBe(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(logSpy).toHaveBeenCalledWith(t('allSkillsUpToDate', {}, locale));
 
     rmSync(sourceRepo, { recursive: true, force: true });
@@ -596,11 +604,12 @@ describe('core modules', () => {
     for (const [index, skillName] of ['skill-one', 'skill-two'].entries()) {
       const sourceSkillDir = join(sourceRepo, 'skills', skillName);
       await createSkill(sourceSkillDir, skillName, `# version ${index + 2}`);
-      await installSkillToBaseDir(sourceSkillDir, skillName, {
+      await installManagedSkill(sourceSkillDir, skillName, {
         displayName: skillName,
         source: 'owner/repo',
         sourceType: 'github',
         sourceUrl: sourceRepo,
+        sourceRef: 'main',
         skillPath: `skills/${skillName}/SKILL.md`,
         skillFolderHash: `old-hash-${index}`,
       });
@@ -618,17 +627,17 @@ describe('core modules', () => {
     });
     vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
 
-    const originalInstallSkillToBaseDir = baseDir.installSkillToBaseDir;
+    const originalInstallManagedSkill = baseDir.installManagedSkill;
     let activeInstalls = 0;
     let maxConcurrentInstalls = 0;
-    vi.spyOn(baseDir, 'installSkillToBaseDir').mockImplementation(
+    vi.spyOn(baseDir, 'installManagedSkill').mockImplementation(
       async (...args) => {
         activeInstalls += 1;
         maxConcurrentInstalls = Math.max(maxConcurrentInstalls, activeInstalls);
         await new Promise((resolve) => setTimeout(resolve, 20));
 
         try {
-          return await originalInstallSkillToBaseDir(...args);
+          return await originalInstallManagedSkill(...args);
         } finally {
           activeInstalls -= 1;
         }
