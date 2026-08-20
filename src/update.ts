@@ -40,6 +40,9 @@ function getSkipReason(entry: ManagedSkillLockEntry): string {
   if (entry.sourceType === 'git') {
     return t('gitUrlHashTrackingUnsupported');
   }
+  if (entry.sourceType === 'well-known' || entry.sourceType === 'download') {
+    return t('urlHashTrackingUnsupported');
+  }
   if (!entry.skillFolderHash) {
     return t('noVersionHashAvailable');
   }
@@ -87,6 +90,13 @@ function sourceDescriptor(entry: ManagedSkillLockEntry): SourceDescriptor {
   if (entry.sourceType === 'local' || isAbsolute(entry.sourceUrl)) {
     return { kind: 'local', localPath: entry.sourceUrl };
   }
+  if (entry.sourceType === 'well-known' || entry.sourceType === 'download') {
+    return {
+      kind: 'remote',
+      url: entry.sourceUrl,
+      wellKnown: entry.sourceType === 'well-known',
+    };
+  }
   return {
     kind: 'git',
     url: entry.sourceUrl,
@@ -99,7 +109,9 @@ function sourceKey(entry: ManagedSkillLockEntry): string {
   const source = sourceDescriptor(entry);
   return source.kind === 'local'
     ? `local\0${source.localPath}`
-    : `git\0${source.url}\0${source.ref ?? ''}`;
+    : source.kind === 'remote'
+      ? `remote\0${source.url}`
+      : `git\0${source.url}\0${source.ref ?? ''}`;
 }
 
 function groupUpdateItems<T extends UpdateItem | NamedReason>(items: T[]) {

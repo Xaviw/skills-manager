@@ -43,6 +43,41 @@ describe('source parser', () => {
     });
   });
 
+  it('parses non-git HTTP URLs as well-known sources', () => {
+    expect(parseSource('https://open.feishu.cn')).toEqual({
+      type: 'well-known',
+      url: 'https://open.feishu.cn',
+    });
+    expect(parseSource('https://docs.example.com/skills')).toEqual({
+      type: 'well-known',
+      url: 'https://docs.example.com/skills',
+    });
+  });
+
+  it('parses hosted artifact URLs as direct downloads', () => {
+    expect(
+      parseSource(
+        'https://raw.githubusercontent.com/owner/repo/main/skills/my-skill/SKILL.md',
+      ),
+    ).toEqual({
+      type: 'download',
+      url: 'https://raw.githubusercontent.com/owner/repo/main/skills/my-skill/SKILL.md',
+    });
+    expect(
+      parseSource('https://github.com/owner/repo/archive/refs/heads/main.zip'),
+    ).toEqual({
+      type: 'download',
+      url: 'https://github.com/owner/repo/archive/refs/heads/main.zip',
+    });
+  });
+
+  it('keeps git-looking URLs as generic git sources', () => {
+    expect(parseSource('https://git.example.com/team/repo.git')).toEqual({
+      type: 'git',
+      url: 'https://git.example.com/team/repo.git',
+    });
+  });
+
   it('extracts owner/repo from supported GitHub sources only', () => {
     expect(
       getOwnerRepo({

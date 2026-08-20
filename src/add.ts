@@ -261,9 +261,13 @@ export async function runAdd(
       const sourceType =
         source.kind === 'local'
           ? 'local'
-          : source.githubRepo
-            ? 'github'
-            : 'git';
+          : source.kind === 'remote'
+            ? source.wellKnown
+              ? 'well-known'
+              : 'download'
+            : source.githubRepo
+              ? 'github'
+              : 'git';
       const token = getGitHubToken();
       const metadataSpinner: ProgressSpinner | null =
         shouldRenderProgress &&

@@ -78,6 +78,9 @@ General:
   ),
   cloningSourceRepository: 'Cloning source repository...',
   discoveringSkillsInSource: 'Discovering skills in source...',
+  fetchingRemoteSource: 'Fetching skills from remote source...',
+  remoteSourceNotValidSkill:
+    'URL is not a valid SKILL.md and no well-known skills index was found. If this is a git repository, use a git@... or .git URL.',
   fetchingSkillMetadataProgress: withParams(
     ({ current, total, skillName }) =>
       `Fetching skill metadata ${current}/${total}${skillName ? `: ${skillName}` : ''}`,
@@ -117,6 +120,7 @@ General:
   removedSkills: withParams(({ count }) => `Removed ${count} skill(s)`),
   localPath: 'Local path',
   gitUrlHashTrackingUnsupported: 'Git URL (hash tracking not supported)',
+  urlHashTrackingUnsupported: 'URL source (hash tracking not supported)',
   noVersionHashAvailable: 'No version hash available',
   noSkillPathRecorded: 'No skill path recorded',
   noVersionTracking: 'No version tracking',
@@ -231,6 +235,9 @@ const zhMessages: Record<TranslationKey, MessageValue> = {
   ),
   cloningSourceRepository: '正在克隆来源仓库...',
   discoveringSkillsInSource: '正在发现来源中的技能...',
+  fetchingRemoteSource: '正在从远程来源获取技能...',
+  remoteSourceNotValidSkill:
+    '该 URL 不是有效的 SKILL.md，且未发布 well-known 技能索引。若为 git 仓库，请使用 git@... 或以 .git 结尾的 URL。',
   fetchingSkillMetadataProgress: withParams(
     ({ current, total, skillName }) =>
       `正在获取技能元数据 ${current}/${total}${skillName ? `：${skillName}` : ''}`,
@@ -267,6 +274,7 @@ const zhMessages: Record<TranslationKey, MessageValue> = {
   removedSkills: withParams(({ count }) => `已移除 ${count} 个技能`),
   localPath: '本地路径',
   gitUrlHashTrackingUnsupported: 'Git URL（不支持哈希跟踪）',
+  urlHashTrackingUnsupported: 'URL 来源（不支持哈希跟踪）',
   noVersionHashAvailable: '没有可用的版本哈希',
   noSkillPathRecorded: '没有记录技能路径',
   noVersionTracking: '没有版本跟踪信息',

@@ -16,6 +16,12 @@ export type SourceDescriptor =
       ref?: string;
       subpath?: string;
       githubRepo?: string;
+    }
+  | {
+      kind: 'remote';
+      url: string;
+      subpath?: string;
+      wellKnown: boolean;
     };
 
 export interface SourceSkill extends Skill {
@@ -33,7 +39,12 @@ export interface SourceSnapshot {
   issues: SourceIssue[];
 }
 
-export type ParsedSourceType = 'github' | 'git' | 'local';
+export type ParsedSourceType =
+  | 'github'
+  | 'git'
+  | 'local'
+  | 'well-known'
+  | 'download';
 
 export interface ParsedSource {
   type: ParsedSourceType;
@@ -41,6 +52,11 @@ export interface ParsedSource {
   subpath?: string;
   localPath?: string;
   ref?: string;
+}
+
+export interface RemoteSourceResult {
+  rootDir: string;
+  tempDir: string;
 }
 
 export interface ManagedSkillLockEntry {

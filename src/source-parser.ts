@@ -106,10 +106,88 @@ export function parseSource(input: string): ParsedSource {
     };
   }
 
+  if (isHostedArtifactUrl(normalizedInput)) {
+    return {
+      type: 'download',
+      url: normalizedInput,
+    };
+  }
+
+  if (isWellKnownUrl(normalizedInput)) {
+    return {
+      type: 'well-known',
+      url: normalizedInput,
+    };
+  }
+
   return {
     type: 'git',
     url: input,
   };
+}
+
+/**
+ * Raw file / archive / release asset URLs that must be downloaded directly
+ * instead of being normalized to their parent repository and cloned.
+ */
+function isHostedArtifactUrl(input: string): boolean {
+  try {
+    const parsed = new URL(input);
+    const host = parsed.hostname.toLowerCase();
+
+    if (
+      host === 'raw.githubusercontent.com' ||
+      host === 'codeload.github.com' ||
+      host === 'objects.githubusercontent.com'
+    ) {
+      return true;
+    }
+
+    if (host === 'github.com') {
+      return /^\/[^/]+\/[^/]+\/(?:archive\/|raw\/|releases\/(?:download\/|latest\/download\/))/.test(
+        parsed.pathname,
+      );
+    }
+
+    if (host === 'gitlab.com') {
+      return /\/-(?:archive|raw)\//.test(parsed.pathname);
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * An HTTP(S) URL that is not a known git host and does not look like a git
+ * repository. Callers should try well-known discovery first, then fall back
+ * to downloading the URL as a SKILL.md file.
+ */
+function isWellKnownUrl(input: string): boolean {
+  if (!input.startsWith('http://') && !input.startsWith('https://')) {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(input);
+    const excludedHosts = [
+      'github.com',
+      'gitlab.com',
+      'raw.githubusercontent.com',
+    ];
+    if (excludedHosts.includes(parsed.hostname)) {
+      return false;
+    }
+
+    if (input.endsWith('.git')) {
+      return false;
+    }
+
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function resolveLocalPath(input: string): string {

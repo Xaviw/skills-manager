@@ -64,6 +64,9 @@ export function getSourceRepositoryIdentity(source: SourceDescriptor): string {
   if (source.kind === 'local') {
     return resolve(source.localPath);
   }
+  if (source.kind === 'remote') {
+    return source.url;
+  }
   return (
     source.githubRepo?.toLowerCase() ??
     getOwnerRepo({ type: 'git', url: source.url })?.toLowerCase() ??
